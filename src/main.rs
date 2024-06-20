@@ -6,6 +6,7 @@ pub mod cost;
 pub mod tsweep;
 pub mod tcloseness;
 
+use tcloseness::closeness;
 use tgraph::*;
 use tsweep::TSweep;
 
@@ -31,6 +32,10 @@ struct Opt {
     ///    compute optimum-cost walks from a source `s` (set with `-source`)
     ///    and output for each node `t` the cost (see `-criterion`) of
     ///    an optimum-cost st-walk.
+    ///  `c` or `closeness` for harmonic closeness of all nodes:
+    ///    the harmonic closeness of `s` is `\sum_{t != s} 1 / dist(s,t)`
+    ///    where `dist(s,t)` is the length in number of temporal edges
+    ///    of a shortest walk from `s` to `t` (shortest criterion).
     /// `p` or `print` for temporal edges (sorted by arrival time).
     #[structopt(short, long, default_value = "print", verbatim_doc_comment)]
     command: String,
@@ -117,6 +122,13 @@ fn main() {
             }
         },
 
+        "c" | "closeness" => {
+            let beta = if opt.beta == -1 { Time::MAX } else { Time::try_from(opt.beta).expect("unexpected beta value") };
+            log::info!("use of beta={beta}");
+            let hc = closeness(&tg, beta);
+            for c in hc { println!("{}", c); }
+        },
+
         _ => {
             match opt.criterion.as_str() {
                 "foremost" | "Fo" => command::<cost::Foremost>(&tg, &opt),
@@ -140,10 +152,11 @@ fn command<C: cost::Cost>(tg: &TGraph, opt: &Opt) {
     let beta = if opt.beta == -1 { Time::MAX } else { Time::try_from(opt.beta).expect("unexpected beta value") };
     log::info!("use of beta={beta}");
  
+    let mut tsweep: TSweep<C> = TSweep::new(&tg);
+
     match opt.command.as_str() {
 
         "soc" | "src-opt-cost" => {
-            let mut tsweep: TSweep<C> = TSweep::new(&tg);
             tsweep.scan(opt.source, beta);
             let opt_costs = tsweep.opt_costs(opt.source);
             for c in opt_costs {

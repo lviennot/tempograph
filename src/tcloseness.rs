@@ -11,7 +11,7 @@ pub fn closeness(tg: &TGraph, beta: Time) -> Vec<f64> {
         let opt_costs = tsweep.opt_costs(s);
         let mut hc = 0.;
         for t in 0..tg.n {
-            if opt_costs[t] < infty { hc += 1. / opt_costs[t] as f64 }
+            if t != s && opt_costs[t] < infty { hc += 1. / opt_costs[t] as f64 }
         }
         hc
     }).collect()
