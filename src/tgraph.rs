@@ -1,30 +1,50 @@
 use crate::graph;
 use std::collections::HashMap;
 
-pub type Node = u32;
-pub type Time = u32; // Time:MIN is reserved as infinite for fastest cost, use i32 if 0 is needed
-pub type Eind = u32; // tedge index
+/// node index
+pub type Node = usize; 
 
-/// a temporal edge
+/// Time:MIN is reserved as infinite for fastest cost
+pub type Time = i64; 
+
+/// tedge index
+pub type Eind = usize; 
+
+
+/// A temporal graph as a doubly sorted list of temporal edges.
+#[derive(Clone)]
+pub struct TGraph {
+    /// number of nodes (nodes are numbered from 0 to n-1)
+    pub n: Node, 
+
+    /// number of temporal edges
+    pub m: Eind, 
+
+    /// tedges sorted by tail and departure time
+    pub edep: Vec<TEdge>, 
+
+    /// indexes of tedges from u are in edep[u_fst[u]..u_fst[u+1]]
+    pub u_fst: Vec<Eind>, 
+
+    /// indexex of tedges (in edep) sorted by arrival time
+    pub earr: Vec<Eind>, 
+}
+
+
+/// A temporal edge
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug)]
 pub struct TEdge {
     /// tail
     pub u: Node,
+ 
     /// head
     pub v: Node,
+ 
     /// departure time
     pub t: Time, 
+ 
     /// delay (or travel time)
     pub d: Time, 
-}
-
-#[derive(Clone)]
-pub struct TGraph {
-    pub n: Node, // largest node number
-    pub m: Eind, // number of temporal edges
-    pub earr: Vec<TEdge>, // tedges sorted by arrival time
-    pub edep: Vec<Eind>, // indexes (in earr) of tedges sorted by tail and departure time
-    pub u_fst: Vec<Eind>, // indexes of tedges from u are in edep[u_fst[u]..u_fst[u+1]]
 }
 
 
@@ -89,13 +109,22 @@ impl FromStr for TEdge {
         let u: Node = TEdge::parse(words.next())?;
         let v: Node = TEdge::parse(words.next())?;
         let t: Time = TEdge::parse(words.next())?;
+        if t <= Time::MIN { 
+            log::info!("Time t={} is expected to be greater than Time::MIN={} \
+                        (which is considered as infinite Fastest cost).", 
+                       t, Time::MIN); 
+        }
         let d: Time = 
             match words.next() {
                 Some(s) => 
                     s.parse().map_err(|_| format!("bad number format in `{}`", s))?,
                 None => 1,
             };
-        Ok(TEdge { u, v, t, d })
+        if d < 0 {
+            Err(format!("negative delay: {d}"))
+        } else {
+            Ok(TEdge { u, v, t, d })
+        }
     }
 }
 
@@ -105,20 +134,20 @@ impl TGraph {
 
     pub fn new(mut earr: Vec<TEdge>) -> Self {
         let m: usize = earr.len();
-        if m > Eind::max as usize { panic!("graph too large, need larger Eind type!") }
+        if m > Eind::max as usize { panic!("graph too large, need larger Eind type!") } // if using Eind = u32
         let m = m as Eind;
-        let mut n:  Node = 0; // max number of a node
+        let mut n:  Node = 0; // number of nodes
         for e in &earr {
-            if e.u > n { n = e.u; }
-            if e.v > n { n = e.v; }
+            if e.u + 1 > n { n = e.u + 1; }
+            if e.v + 1 > n { n = e.v + 1; }
         }
 
         earr.sort_by(|e,f| e.cmp_arr(&f));
 
         // topological sort of zero delay edges:
         let mut index: HashMap<Node, graph::Node> = HashMap::new();
-        let mut index_orig: Vec<Node> = vec![n as Node; n as usize + 1];
-        let mut topord_rank: Vec<Node> = vec![n as Node; n as usize + 1];
+        let mut index_orig: Vec<Node> = vec![n as Node; n];
+        let mut topord_rank: Vec<Node> = vec![n as Node; n];
         let mut i = 0;
         while i < earr.len() {
             let ei = &earr[i];
@@ -152,10 +181,10 @@ impl TGraph {
                     let mut rank: Node = 0;
                     for u in graph::topological_sort(&g) {
                         let v = index_orig[u];
-                        topord_rank[v as usize] = rank;
+                        topord_rank[v] = rank;
                         rank += 1;
                     }
-                    earr[i..j].sort_by_key(|e| topord_rank[e.u as usize]);
+                    earr[i..j].sort_by_key(|e| topord_rank[e.u]);
                 }
                 i = j;
             } else {
@@ -164,67 +193,51 @@ impl TGraph {
         }
         // end topological sort
 
-        let mut edep: Vec<Eind> = (0..m).map(|i| i as Eind).collect();
-        edep.sort_by(|&i,&j| earr[i as usize].cmp_u_t(&earr[j as usize]));
+        let mut edep_ind: Vec<Eind> = (0..m).map(|i| i as Eind).collect();
+        edep_ind.sort_by(|&i,&j| earr[i].cmp_u_t(&earr[j])); // stable sort
         
-        let mut u_fst: Vec<Eind> = vec![0; (n+2) as usize]; // store out-deg and then index of first out-edge
+        let mut u_fst: Vec<Eind> = vec![0; n+1]; // store out-deg and then index of first out-edge
         for e in &earr {
-            u_fst[(e.u+1) as usize] += 1; // out-deg in next cell
+            u_fst[e.u+1] += 1; // out-deg in next cell
         }
-       for u in 0..=n as usize { // prefix sum
+       for u in 0..n { // prefix sum
             u_fst[u+1] += u_fst[u];
         }
-        assert_eq!(u_fst[(n+1) as usize], m as Eind);
+        assert_eq!(u_fst[n], m as Eind);
 
-        Self { n, m, earr, edep, u_fst }
+        // store edges in edep rather than earr
+        let mut earr_ind = vec![0 as Eind; m];
+        for (i, &j) in edep_ind.iter().enumerate() {
+            earr_ind[j] = i as Eind;
+        }
+        let check = earr.clone();
+        earr.sort_by(|e, f| e.cmp_u_t(f)); // stable sort
+        for (i, &j) in edep_ind.iter().enumerate() {
+            assert_eq!(&check[j], &earr[i]);
+        }
+
+        Self { n, m, edep: earr, u_fst, earr: earr_ind }
     }
 
-    fn edep_e(&self, i: Eind) -> &TEdge {
-        &self.earr[self.edep[i as usize] as usize]
-    } 
-
-    /// Returns for each tedge a triplet (i,l,r) where i is its index in edep,
-    /// and edges in edep (those in edep[l..r]) beta-extend it (can follow it in a in beta-restless walk).
-    pub fn extend_indexes(&self, beta: Time) -> Vec<(Eind, Eind, Eind)> {
+    /// Returns for each tedge (in order of earr) a couple (l,r) where corresponding
+    /// edges in edep (those in edep[l..r]) beta-extend it (can follow it in a in beta-restless walk).
+    pub fn extend_indexes(&self, beta: Time) -> Vec<(Eind, Eind)> {
         let mut l_v = self.u_fst.clone(); // included
         let mut r_v = self.u_fst.clone(); // not included
-        let mut ind: Vec<(Eind, Eind, Eind)> = Vec::with_capacity(self.m as usize);
-        for e in &self.earr {
-            let v = e.v as usize;
+        let mut ind: Vec<(Eind, Eind)> = Vec::with_capacity(self.m);
+        for &i in self.earr.iter() {
+            let e = & self.edep[i];
+            let v = e.v;
             let arr = e.arr();
             let mut l = l_v[v];
-            while l < self.u_fst[v+1] && self.edep_e(l).t < arr { l += 1; }
+            while l < self.u_fst[v+1] && self.edep[l].t < arr { l += 1; }
             l_v[v] = l;
             let mut r = max(r_v[v], l);
-            while r < self.u_fst[v+1] && self.edep_e(r).t - arr <= beta { r += 1; }
+            while r < self.u_fst[v+1] && self.edep[r].t - arr <= beta { r += 1; }
             r_v[v] = r;
-            ind.push((0,l,r)); // idnex of e in edep not known yet
-        }
-        for (i, &j) in self.edep.iter().enumerate() {
-            ind[j as usize].0 = i as Eind;
+            ind.push((l,r)); 
         }
         ind
-    }
-
-    // Counts for each tedge how many tedges it extends according to interval indexes given in `succ`.
-    #[allow(dead_code)]
-    fn extend_in_degrees(&self, succ: &Vec<(Eind, Eind, Eind)>) -> Vec<Eind> {
-        let mut deg: Vec<Eind> = vec![0; self.m as usize];
-        let mut minus: Vec<Eind> = vec![0; self.m as usize + 1];
-        for &(_, l, r) in succ {
-            if l < r {
-                deg[l as usize] += 1; // one more interval over l..
-                minus[r as usize] += 1; // one less interval from r..
-            }
-        }
-        assert_eq!(minus[0], 0);
-        // prefix sum:
-        for i in 1..self.m as usize {
-            deg[i] += deg[i-1];
-            deg[i] -= minus[i];
-        }
-        assert_eq!(deg[self.m as usize - 1], minus[self.m as usize]);
-        deg
     }
 
 }
@@ -321,11 +334,9 @@ pub mod tests {
             let tg: TGraph = tg_str.parse().unwrap();
             check_tgraph(&tg);
             for beta in [0, 1, 2, 100] {
-                //println!("{:?}", tg.u_fst);
+                //eprintln!("graph={}, beta={}", tg_str, beta);
                 let succ = tg.extend_indexes(beta);
                 check_extend_indexes(&tg, beta, &succ);
-                let deg = tg.extend_in_degrees(&succ);
-                assert_eq!(deg.iter().sum::<Eind>(), succ.iter().map(|&(_,l,r)| r-l).sum::<Eind>());
             }
         }
     }
@@ -333,35 +344,35 @@ pub mod tests {
     #[allow(dead_code)]
     pub fn check_tgraph(tg: &TGraph) {
         let mut j: Eind = 0;
-        for u in 0..tg.n as usize {
+        for u in 0..tg.n {
             for i in tg.u_fst[u]..tg.u_fst[u+1] {
                 assert_eq!(i, j);
                 j += 1;
-                let e = tg.edep_e(i);
-                assert_eq!(u, e.u as usize);
+                let e = &tg.edep[i];
+                assert_eq!(u, e.u);
             }
         }
     }
 
     #[allow(dead_code)]
-    pub fn check_extend_indexes(tg: &TGraph, beta: Time, succ: &Vec<(Eind, Eind, Eind)>) -> () {
-        //for e in tg.edep.iter().map(|&i| &tg.earr[i]) { println!("{:?}", e) }
+    pub fn check_extend_indexes(tg: &TGraph, beta: Time, succ: &Vec<(Eind, Eind)>) -> () {
+        eprintln!("{:?}", succ);
         // brute force check:
-        for (i, e) in tg.earr.iter().enumerate() {
-            let &(j, l, r) = &succ[i];
-            assert_eq!(i, tg.edep[j as usize] as usize);
-            for j in 0..tg.m as Eind {
-                let f = tg.edep_e(j);
+        for (i, &ei) in tg.earr.iter().enumerate() {
+            let e = &tg.edep[ei];
+            let &(l, r) = &succ[i];
+            for j in 0..tg.m {
+                let f = &tg.edep[j];
                 assert_eq!(f.extends(e, beta), l <= j && j < r);
             }
         }
         // check non-decreasingness of l, and r:
         let mut l_v = tg.u_fst.clone(); 
         let mut r_v = tg.u_fst.clone();
-        for (i, e) in tg.earr.iter().enumerate() {
-            let &(_, l, r) = &succ[i];
-            let v = e.v as usize;
-           assert!(l >= l_v[v] && r >= r_v[v]);
+        for (i, &ei) in tg.earr.iter().enumerate() {
+            let &(l, r) = &succ[i];
+            let v = tg.edep[ei].v;
+            assert!(l >= l_v[v] && r >= r_v[v]);
             l_v[v] = l;
             r_v[v] = r;
         }

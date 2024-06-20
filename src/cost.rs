@@ -17,7 +17,7 @@ pub trait Cost : PartialOrd + Add<Output = Self> + Sized + Clone + std::fmt::Deb
 
 /// Cost of a temporal walk Q as its arrival time arr(Q) (for minimization).
 #[derive(PartialEq, Eq, PartialOrd, Ord, Copy, Clone, Debug)]
-pub struct Foremost(bool); // true for infinite, false otherwise
+pub struct Foremost(pub bool); // true for infinite, false otherwise
 
 impl Add for Foremost {
     type Output = Self; 
@@ -37,7 +37,7 @@ impl Cost for Foremost {
 
 /// Cost of a temporal walk Q as its arrival time arr(Q) (for minimization).
 #[derive(PartialEq, Eq, PartialOrd, Ord, Copy, Clone, Debug)]
-pub struct Latest(bool); // true for infinite, false otherwise
+pub struct Latest(pub bool); // true for infinite, false otherwise
 
 impl Add for Latest {
     type Output = Self; 
@@ -58,7 +58,7 @@ impl Cost for Latest {
 /// Cost of a temporal walk Q as its duration (for minimization).
 ///   (The duration of Q is arr(Q) - dep(Q)).
 #[derive(PartialEq, Eq, PartialOrd, Ord, Copy, Clone, Debug)]
-pub struct Fastest(Reverse<Time>); // Cost of Q is - dep(Q)
+pub struct Fastest(pub Reverse<Time>); // Cost of Q is - dep(Q)
 
 impl Add for Fastest {
     type Output = Self;
@@ -89,7 +89,7 @@ impl Cost for Fastest {
 /// Cost of a temporal walk Q as its waiting time (for minimization). 
 ///   (The waiting time of Q is arr(Q) - dep(Q) - sum_{e \in Q} e.d).
 #[derive(Copy, Clone, Debug)]
-pub struct Waiting(Time, Time); // dep(Q), sum_{e \in Q}
+pub struct Waiting(pub Time, pub Time); // dep(Q), sum_{e \in Q} e.d
 
 impl Add for Waiting {
     type Output = Self;
@@ -124,15 +124,15 @@ impl Eq for Waiting {
 }
 impl PartialOrd for Waiting {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        let s: u32 = self.0 + self.1;
-        let so: u32 = other.0 + other.1;
+        let s: Time = self.0 + self.1;
+        let so: Time = other.0 + other.1;
         Some(s.cmp(&so).reverse())
     }
 }
 impl Ord for Waiting {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        let s: u32 = self.0 + self.1;
-        let so: u32 = other.0 + other.1;
+        let s: Time = self.0 + self.1;
+        let so: Time = other.0 + other.1;
         s.cmp(&so).reverse()
     }
 }
@@ -143,7 +143,7 @@ impl Ord for Waiting {
 /// Cost of a temporal walk Q as its hop count (for minimization). 
 ///   (The hop count hop(Q) is its number of temporal edges).
 #[derive(PartialEq, Eq, PartialOrd, Ord, Copy, Clone, Debug)]
-pub struct Shortest(u32); // hop(Q)
+pub struct Shortest(pub u32); // hop(Q)
 
 impl Add for Shortest {
     type Output = Self;
@@ -151,7 +151,7 @@ impl Add for Shortest {
 }
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Copy, Clone, Debug)]
-pub struct ShortestTarget(u32); // hop(Q)
+pub struct ShortestTarget(pub u32); // hop(Q)
 
 impl Cost for Shortest {
     type TargetCost = ShortestTarget;
@@ -166,7 +166,7 @@ impl Cost for Shortest {
 
 /// Cost of a temporal walk Q as (arr(Q), hop(Q)) (for minimization by lexicographic order). 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Copy, Clone, Debug)]
-pub struct ShortestForemost(u32); // hop(Q)
+pub struct ShortestForemost(pub u32); // hop(Q)
 
 impl Add for ShortestForemost {
     type Output = Self;
@@ -174,7 +174,7 @@ impl Add for ShortestForemost {
 }
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Copy, Clone, Debug)]
-pub struct ShortestForemostTarget(Time, u32); // arr(Q), hop(Q)
+pub struct ShortestForemostTarget(pub Time, pub u32); // arr(Q), hop(Q)
 
 impl Cost for ShortestForemost {
     type TargetCost = ShortestForemostTarget;
@@ -189,7 +189,7 @@ impl Cost for ShortestForemost {
 
 /// Cost of a temporal walk Q as (arr(Q), hop(Q)) (for minimization by lexicographic order). 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Copy, Clone, Debug)]
-pub struct ShortestLatest(u32); // hop(Q)
+pub struct ShortestLatest(pub u32); // hop(Q)
 
 impl Add for ShortestLatest {
     type Output = Self;
@@ -197,7 +197,7 @@ impl Add for ShortestLatest {
 }
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Copy, Clone, Debug)]
-pub struct ShortestLatestTarget(Reverse<Time>, u32); // arr(Q), hop(Q)
+pub struct ShortestLatestTarget(pub Reverse<Time>, pub u32); // arr(Q), hop(Q)
 
 impl Cost for ShortestLatest {
     type TargetCost = ShortestLatestTarget;
@@ -212,7 +212,7 @@ impl Cost for ShortestLatest {
 
 /// Cost of a temporal walk Q as (arr(Q) - dep(Q), hop(Q)) (for minimization by lexicographic order). 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Copy, Clone, Debug)]
-pub struct ShortestFastest(Reverse<Time>, u32); // (dep(Q), hop(Q))
+pub struct ShortestFastest(pub Reverse<Time>, pub u32); // (dep(Q), hop(Q))
 
 impl Add for ShortestFastest {
     type Output = Self;
@@ -220,13 +220,13 @@ impl Add for ShortestFastest {
 }
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Copy, Clone, Debug)]
-pub struct ShortestFastestTarget(Time, u32); // (dep(Q) - arr(Q), hop(Q))
+pub struct ShortestFastestTarget(pub Time, pub u32); // (dep(Q) - arr(Q), hop(Q))
 
 impl Cost for ShortestFastest {
     type TargetCost = ShortestFastestTarget;
     fn infinite_cost() -> Self { ShortestFastest(Reverse(Time::MIN), u32::MAX) }
     fn infinite_target_cost() -> Self::TargetCost { ShortestFastestTarget(Time::MAX, u32::MAX) }
-    fn empty_target_cost() -> Self::TargetCost { ShortestFastestTarget(0u32, 0u32) }
+    fn empty_target_cost() -> Self::TargetCost { ShortestFastestTarget(0, 0) }
     fn edge_cost(e: &TEdge) -> Self {
         if e.t <= Time::MIN { 
             panic!("Time t={} is expected to be greater than Time::MIN={} \

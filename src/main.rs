@@ -3,10 +3,11 @@ extern crate log;
 pub mod graph;
 pub mod tgraph;
 pub mod cost;
-pub mod tbetweenness;
+pub mod tsweep;
+pub mod tcloseness;
 
 use tgraph::*;
-use tbetweenness::*;
+use tsweep::TSweep;
 
 use std::fs::File;
 use std::io::{BufRead, BufReader}; // use std::io::{self, prelude::*, BufReader};
@@ -31,17 +32,13 @@ struct Opt {
     #[structopt(short, long)]
     verbose: bool,
 
-    /// Number of threads to use (betweenness from different source nodes
-    /// are computed in parallel).
-    #[structopt(short, long = "num-threads", default_value = "3")]
-    nthreads: u32,
-
     /// Computation to perform:
-    /// `b` or `betweenness` for betweenness values of all of nodes,
-    /// `sb` or `src-betweenness` for betweenness values of all nodes and
-    /// temporal edges restricted to walks from a given source (see `--source`),
+    /// `mc` or `min-cost-from` for single source minimum cost walks:
+    ///    compute minimum-cost walks from a source `s` (set with `-source`)
+    ///    and output for each node `t` the cost (see `-criterion`) of
+    ///    a minimum-cost st-walk.
     /// `p` or `print` for temporal edges (sorted by arrival time).
-    #[structopt(short, long, default_value = "betweenness", verbatim_doc_comment)]
+    #[structopt(short, long, default_value = "print", verbatim_doc_comment)]
     command: String,
 
     /// Criterion considered for optimal temporal walks: 
@@ -61,22 +58,10 @@ struct Opt {
     #[structopt(short, long, default_value = "-1")]
     beta: i64,
 
-    /// Source node (with command `src-betweenness`):
+    /// Source node (with commands considering a source node such as `min-cost-from`):
     /// consider only walks from that node.
     #[structopt(short, long, default_value = "1")]
     source: Node,
-
-    /// Precision: the computation of betweenness is done by computing the number
-    /// optimal walks (for the choson criterion) between any pair of nodes.
-    /// As such numbers can get very high, it may lead to overflow depending on
-    /// the types chosen for storing integers and rationals. Smaller types lead
-    /// to faster computation, but may fail due to overflow. Also, accumulation of
-    /// imprecision with floats can lead to negative values. Possible choices are
-    /// `approx` for f64 and f64, `low` for u64 and f64, `medium` for u128 and f64, 
-    /// `high` for BigUInt and f256:f256, `exact` for BigUint and Ratio<BigUint> 
-    /// (this latter choice provides exact computation). 
-    #[structopt(short, long, default_value = "medium")]
-    precision: String,
 
     /// Input file: a temporal graph in the following format:
     /// an optional first line with node maximum number `n` 
@@ -122,172 +107,56 @@ fn main() {
 
     match opt.command.as_str() {
 
+        "mc" | "min-cost-from" => {
+            match opt.criterion.as_str() {
+                "foremost" | "Fo" => command::<cost::Foremost>(&tg, &opt),
+                "latest" | "L" => command::<cost::Latest>(&tg, &opt),
+                "fastest" | "Fa" => command::<cost::Fastest>(&tg, &opt),
+                "waiting" | "W" => command::<cost::Waiting>(&tg, &opt),
+                "shortest" | "S" => command::<cost::Shortest>(&tg, &opt),
+                "shortest-foremost" | "SFo" => command::<cost::ShortestForemost>(&tg, &opt),
+                "shortest-latest" | "SL" => command::<cost::ShortestLatest>(&tg, &opt),
+                "shortest-fastest" | "SFa" => command::<cost::ShortestFastest>(&tg, &opt),
+                _ => panic!("Cost '{}' not suppoted.", opt.criterion)
+            }
+        },
+
         "size" | "sz" => {
             println!("{} {}", tg.n, tg.m);
         }
 
         "earr" | "p" | "print" => {
-            for i in 0..tg.m as usize {
-                println!("{}", &tg.earr[i]);
+            for &i in tg.earr.iter() {
+                println!("{}", &tg.edep[i]);
             }
         },
 
         "edep" => {
-            for j in 0..tg.m as usize {
-                let i = tg.edep[j];
-                println!("{j} ({i}): {}", &tg.earr[i as usize]);
+            for e in tg.edep.iter() {
+                println!("{}", e);
             }
         },
 
-        "b" | "betweenness" | "sb" | "src-betweenness" | "berr" => {
-            match opt.criterion.as_str() {
-                "foremost" | "Fo" => precision::<cost::Foremost>(&tg, &opt),
-                "latest" | "L" => precision::<cost::Latest>(&tg, &opt),
-                "fastest" | "Fa" => precision::<cost::Fastest>(&tg, &opt),
-                "waiting" | "W" => precision::<cost::Waiting>(&tg, &opt),
-                "shortest" | "S" => precision::<cost::Shortest>(&tg, &opt),
-                "shortest-foremost" | "SFo" => precision::<cost::ShortestForemost>(&tg, &opt),
-                "shortest-latest" | "SL" => precision::<cost::ShortestLatest>(&tg, &opt),
-                "shortest-fastest" | "SFa" => precision::<cost::ShortestFastest>(&tg, &opt),
-                _ => panic!("Cost '{}' not suppoted.", opt.criterion)
-            }
-        },
 
         _ => panic!("Unkown command '{}'.", opt.command)
     };
 
 }
 
-/* rug::Rational appears to be faster than Ratio<BigUInt>,
- * but rug::Integer is slower than BigUint...    
- */
-use num_bigint::{BigUint, BigInt};
-use num_rational::Ratio;
-use num_traits::ToPrimitive;
-use rug::{Integer, Rational};
-
-impl RatFrom<BigUint> for Ratio<BigUint> {
-    fn rat_from(i: BigUint) -> Self { i.into() }
-}
-
-impl RatFrom<BigInt> for Ratio<BigInt> {
-    fn rat_from(i: BigInt) -> Self { i.into() }
-}
-
-impl RatFrom<BigUint> for f64 {
-    fn rat_from(i: BigUint) -> Self { i.to_f64().unwrap() }
-}
-
-impl RatFrom<f64> for f64 {
-    fn rat_from(i: f64) -> Self { i }
-}
-
-fn precision<C : cost::Cost>(tg: &TGraph, opt: &Opt) {
-    match opt.precision.as_str() {
-        "approx" => command::<C, NumT<f64, f64, False, False>>(tg, opt),
-        "low" => command::<C, NumT<u64, f64, True, False>>(tg, opt),
-        "medium" => command::<C, NumT<u128, f64, True, False>>(tg, opt),
-        "high-rug" => command::<C, NumT<Integer, f64, True, False>>(tg, opt),
-        "high" => command::<C, NumT<BigUint, f64, True, False>>(tg, opt),
-        "exact-num" => command::<C, NumT<BigUint, Ratio<BigUint>, True, True>>(tg, opt),
-        "exact" => command::<C, NumT<Integer, Rational, True, True>>(tg, opt),
-        _ => panic!("Unkown precision '{}'.", opt.precision)
-    }
-}
-
-fn command<C : cost::Cost, N : Num>(tg: &TGraph, opt: &Opt) {
-
-    let beta = if opt.beta >= 0 { Time::try_from(opt.beta).expect("unexpected beta value") } else { Time::MAX };
+fn command<C: cost::Cost>(tg: &TGraph, opt: &Opt) {
 
     match opt.command.as_str() {
 
-        "b" | "betweenness" if opt.nthreads == 1 => {
-            let betw = betweenness_seq::<C, N>(tg, beta);
-            for v in 0..=tg.n as usize {
-                //println!("{:.4} {}", betw[v].to_f64().unwrap(), betw[v])
-                println!("{}", betw[v])
+        "mc" | "min-cost-from" => {
+            let mut tsweep: TSweep<C> = TSweep::new(&tg);
+            tsweep.scan(opt.source, opt.beta);
+            let opt_costs = tsweep.opt_costs();
+            for c in opt_costs {
+                println!("{:?}", c);
             }
         },
-
-        "b" | "betweenness" => {
-            let betw = betweenness_par::<C, N>(tg, beta, opt.nthreads);
-            for v in 0..=tg.n as usize {
-                //println!("{:.4} {}", betw[v].to_f64().unwrap(), betw[v])
-                println!("{}", betw[v])
-            }
-        },
-
-        "berr" => {
-            let betw_aprx = betweenness_par::<C, N>(tg, beta, opt.nthreads);
-            let betw_exct = betweenness_par::<C, NumT<Integer, Rational, True, True>>(tg, beta, opt.nthreads);
-            let mut nb_diff = 0 as Node;
-            let mut max_diff: Rational = Integer::from(0_u32).into();
-            let mut max_diff_exact: Rational = Integer::from(0_u32).into();
-            let mut max_rel: Rational = Integer::from(0_u32).into();
-            let one: Rational = Integer::from(1_u32).into();
-            let epsilon : Rational = Rational::from_f64(1e-6_f64).unwrap();
-            for v in 0..=tg.n as usize {
-                let apx: f64 = betw_aprx[v].to_string().as_str().parse::<f64>().unwrap();
-                let apx = Rational::from_f64(apx).unwrap();
-                let diff: Rational = betw_exct[v].clone() - apx;
-                println!("{v} {}", diff.to_f64());
-                let diff = diff.abs();
-                if diff > epsilon {
-                    nb_diff += 1;
-                    if betw_exct[v] > one {
-                        let rel = &diff / betw_exct[v].clone();
-                        if rel > max_rel { max_rel = rel }
-                    }
-                }
-                if diff > max_diff { 
-                    max_diff = diff.clone();
-                    max_diff_exact = betw_exct[v].clone();
-                }
-            }   
-            log::info!("nb_diff > {}: {}, max_diff: {:.4e} (for value {:.4e}), max_rel(>1): {:+e}", 
-                epsilon.to_f64(), nb_diff, 
-                max_diff.to_f64(), max_diff_exact.to_f64(), max_rel.to_f64())
-        },
-
-        "sb" | "src-betweenness" => src_betweenness::<C, N>(tg, beta, opt.source),
 
         _ => panic!("Unkown command '{}'.", opt.command)
-    }
-}
-
-fn src_betweenness<C: cost::Cost, N: Num>(tg: &TGraph, beta: Time, src: Node) {
-
-    let mut sweep: TGraphSweep<C, N> = TGraphSweep::new(&tg);
-    
-    for s in src..=src as Node {
-        if s > tg.n { break }
-        //eprintln!(" --- {s} ---------------- ");
-        sweep.clear();
-        sweep.forward(s, beta);
-        sweep.backward(s);
-        /*
-        let costs = sweep.opt_costs();
-        let walks = sweep.opt_walk_counts();    
-        let s_betw = sweep.nodes_betweenness();
-        for v in 1..=tg.n as usize {
-            eprintln!("{s} {v} {} {} {}", costs[v], walks[v], s_betw[v])
-        }
-        */
-    
-    }
-    let costs = sweep.opt_costs();
-    let walks = sweep.opt_walk_counts();
-    let e_betw = sweep.edges_betweenness();
-    //let betw: Vec<num::Rat> = sweep.betweenness();
-
-    for v in 0..=tg.n as usize {
-        //let b: f64 = betw[v].into();
-        println!("{v} {:?} {}", costs[v], walks[v])
-    }
-
-    println!(" --- "); 
-    for i in 0..tg.m as usize {
-        println!("{} [{}] {}", i+1, tg.earr[i], e_betw[i]);
     }
 
 }
