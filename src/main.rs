@@ -18,15 +18,9 @@ use std::path::PathBuf;
 use structopt::StructOpt;
 
 #[derive(Debug, StructOpt)]
-/// Compute temporal betweenness of all nodes of a temporal graph.
+/// Compute optimum-cost temporal walks in a temporal graph, and related subjects.
 /// 
-/// The betweenness of a node `v` evaluates the fraction of optimal walks
-/// going through node `v`. Optimality refers to any criterion among shortest
-/// (in hops), fastest, foremost,... (see option `--criterion`).
-/// As the number of such walks can be very large, the default int type (UInt128)
-/// might be too small and lead to a `attempt to add with overflow` error, use 
-/// `--precision exact` in that case.
-#[structopt(name = "twbc-rc")]
+#[structopt(name = "tempograph")]
 struct Opt {
     /// Log information about progress.
     #[structopt(short, long)]
