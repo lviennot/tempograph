@@ -66,6 +66,8 @@ impl<'tg, C : Cost> TSweep<'tg, C> {
     }
 
    pub fn scan(&mut self, s: Node, beta: Time) {
+        //let succ = self.tg.extend_indexes(beta);
+        let infty = Cost::infinite_cost();
         for &i in self.tg.earr.iter() {
             let e = & self.tg.edep[i];
             let e_arr = e.arr();
@@ -82,7 +84,9 @@ impl<'tg, C : Cost> TSweep<'tg, C> {
                         self.pred[j] = itv.pred;
                     }
                     if r >= itv.r { ui.intervs.pop_front(); } // remove interval
-                    else { itv.l = r; } // truncate interval
+                    else { itv.l = r; break; } // truncate interval
+                } else {
+                    break;
                 }
             }
 
@@ -103,47 +107,59 @@ impl<'tg, C : Cost> TSweep<'tg, C> {
             //  ----------- relax_head e
 
             let e_min_cost = self.min_cost[i].clone();
+            //eprintln!("[{}] {:?}", e, e_min_cost);
 
-            // Compute the interval edep[l_e..r_e] of edges extending e:
-            let mut l_e = self.u_inf[e.v].l;
-            while l_e < self.tg.u_fst[e.v + 1] 
-                && self.tg.edep[l_e].t < e_arr { l_e += 1; }
+            if e_min_cost < infty {
 
-            let mut r_e = max(l_e, self.u_inf[e.v].r);
-            while r_e < self.tg.u_fst[e.v + 1] 
-                && self.tg.edep[r_e].t - e_arr <= beta { r_e += 1; }
+                // Compute the interval edep[l_e..r_e] of edges extending e:
+                let mut l_e = self.u_inf[e.v].l;
+                while l_e < self.tg.u_fst[e.v + 1] 
+                    && self.tg.edep[l_e].t < e_arr { l_e += 1; }
 
-            // Compute the interval edep[l_c..r_e] where e provides min-cost:
-            let mut l_c = max(l_e, self.u_inf[e.v].r);
+                let mut r_e = max(l_e, self.u_inf[e.v].r);
+                while r_e < self.tg.u_fst[e.v + 1] 
+                    && self.tg.edep[r_e].t - e_arr <= beta { r_e += 1; }
+                //assert_eq!((l_e,r_e), succ[i]);
 
-            // Remove intervals with larger cost
-            let vi = &mut self.u_inf[e.v];
-            while let Some(itv) = vi.intervs.back_mut() {
-                if itv.r > l_e && itv.cost > e_min_cost { // larger cost
-                    l_c = max(l_e, itv.r);
-                    if itv.l >= l_e { vi.intervs.pop_back(); } // remove interval
-                    else { itv.r = l_e; } // truncate interval
+                // Compute the interval edep[l_c..r_e] where e provides min-cost:
+                let vi = &mut self.u_inf[e.v];
+                let mut l_c = max(l_e, vi.r);
+
+                // Remove intervals with larger cost
+                while let Some(itv) = vi.intervs.back_mut() {
+                    if itv.r > l_e && itv.cost > e_min_cost { // larger cost
+                        l_c = max(l_e, itv.l);
+                        if itv.l >= l_e { vi.intervs.pop_back(); } // remove interval
+                        else { itv.r = l_e; break; } // truncate interval
+                    } else {
+                        break
+                    }
                 }
-            }
-            // add interval:
-            if l_c < r_e { // if l_c..r_e is not empty
-                vi.intervs.push_back(Interv { 
-                    l: l_c, r: r_e, cost: e_min_cost, pred: i 
-                });
+
+                // add interval:
+                if l_c < r_e { // if l_c..r_e is not empty
+                    vi.intervs.push_back(Interv { 
+                        l: l_c, r: r_e, cost: e_min_cost, pred: i 
+                    });
+                }
+
+                // update right of union of intervals
+                vi.r = r_e;
+
             }
 
         }
     }
 
-    pub fn opt_costs(&self) -> Vec<C::TargetCost> {
+    pub fn opt_costs(&self, src: Node) -> Vec<C::TargetCost> {
         let mut opt = vec![C::infinite_target_cost(); self.tg.n];
+        opt[src] = C::empty_target_cost();
         let infty = C::infinite_cost();
         for (i, e) in self.tg.edep.iter().enumerate() {
             if self.min_cost[i] < infty {
                 let c = C::target_cost(&self.min_cost[i], e);
-                if c < opt[e.v] {
-                    opt[e.v] = c;
-                }
+                //eprintln!("[{}] {:?}", e, c);
+                if c < opt[e.v] { opt[e.v] = c; }
             }
         }
         opt
@@ -151,3 +167,36 @@ impl<'tg, C : Cost> TSweep<'tg, C> {
 
 }
 
+
+#[cfg(test)]
+pub mod tests {
+    use super::*;
+    use crate::cost::*;
+    use crate::tgraph::tests as tgt;
+
+    pub const TESTS_SHORTEST: [(&str, Time, [Hop; 6]); 8] = 
+        [
+            (tgt::BLACKBOARD, 1, [0, 1, 5, 2, 3, 777]),
+            (tgt::BLACKBOARD, 2, [0, 1, 2, 2, 3, 777]),
+            (tgt::LZO, 2, [0, 1, 1, 3, 2, 2]),
+            (tgt::LZO, 3, [0, 1, 1, 3, 2, 2]),
+            (tgt::ROMBUS_4, 0, [0, 1, 2, 2, 5, 777]),
+            (tgt::ROMBUS_4, 2, [0, 1, 2, 2, 3, 777]),
+            (tgt::ROMBUS_4, 10, [0, 1, 2, 2, 3, 777]),
+            (tgt::WHITEBOARD, 4, [0, 1, 1, 3, 777, 777]),
+        ];
+        //[BLACKBOARD, LZO, ROMBUS_4, WHITEBOARD];
+
+    #[test]
+    fn test_shortest() {
+        let src = 1;
+        for (tg_str, beta, sol) in TESTS_SHORTEST {
+            let tg: TGraph = tg_str.parse().unwrap();
+            let mut tsweep: TSweep<Shortest> = TSweep::new(&tg);
+            tsweep.scan(src, beta);
+            let opt_costs = tsweep.opt_costs(src);
+            for v in 1..tg.n { assert_eq!(opt_costs[v], sol[v-1]) }
+        }
+    }
+
+}

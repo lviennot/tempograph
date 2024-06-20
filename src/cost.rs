@@ -138,28 +138,25 @@ impl Ord for Waiting {
 }
 
 
-
+pub type Hop = u32;
 
 /// Cost of a temporal walk Q as its hop count (for minimization). 
 ///   (The hop count hop(Q) is its number of temporal edges).
 #[derive(PartialEq, Eq, PartialOrd, Ord, Copy, Clone, Debug)]
-pub struct Shortest(pub u32); // hop(Q)
+pub struct Shortest(pub Hop); // hop(Q)
 
 impl Add for Shortest {
     type Output = Self;
     fn add(self, rhs: Self) -> Self::Output { Shortest(self.0 + rhs.0) }
 }
 
-#[derive(PartialEq, Eq, PartialOrd, Ord, Copy, Clone, Debug)]
-pub struct ShortestTarget(pub u32); // hop(Q)
-
 impl Cost for Shortest {
-    type TargetCost = ShortestTarget;
-    fn infinite_cost() -> Self { Shortest(u32::MAX) }
-    fn infinite_target_cost() -> Self::TargetCost { ShortestTarget(u32::MAX) }
-    fn empty_target_cost() -> Self::TargetCost { ShortestTarget(0u32) }
-    fn edge_cost(_: &TEdge) -> Self { Shortest(1u32) }
-    fn target_cost(&self, _: &TEdge) -> Self::TargetCost { ShortestTarget(self.0) }
+    type TargetCost = Hop;
+    fn infinite_cost() -> Self { Shortest(Hop::MAX) }
+    fn infinite_target_cost() -> Self::TargetCost { Hop::MAX }
+    fn empty_target_cost() -> Self::TargetCost { 0 }
+    fn edge_cost(_: &TEdge) -> Self { Shortest(1) }
+    fn target_cost(&self, _: &TEdge) -> Self::TargetCost { self.0 }
 }
 
 
@@ -174,14 +171,14 @@ impl Add for ShortestForemost {
 }
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Copy, Clone, Debug)]
-pub struct ShortestForemostTarget(pub Time, pub u32); // arr(Q), hop(Q)
+pub struct ShortestForemostTarget(pub Time, pub Hop); // arr(Q), hop(Q)
 
 impl Cost for ShortestForemost {
     type TargetCost = ShortestForemostTarget;
-    fn infinite_cost() -> Self { ShortestForemost(u32::MAX) }
-    fn infinite_target_cost() -> Self::TargetCost { ShortestForemostTarget(Time::MAX, u32::MAX) }
-    fn empty_target_cost() -> Self::TargetCost { ShortestForemostTarget(Time::MIN, 0u32) }
-    fn edge_cost(_: &TEdge) -> Self { ShortestForemost(1u32) }
+    fn infinite_cost() -> Self { ShortestForemost(Hop::MAX) }
+    fn infinite_target_cost() -> Self::TargetCost { ShortestForemostTarget(Time::MAX, Hop::MAX) }
+    fn empty_target_cost() -> Self::TargetCost { ShortestForemostTarget(Time::MIN, 0) }
+    fn edge_cost(_: &TEdge) -> Self { ShortestForemost(1) }
     fn target_cost(&self, e: &TEdge) -> Self::TargetCost { ShortestForemostTarget(e.arr(), self.0) }
 }
 
@@ -189,7 +186,7 @@ impl Cost for ShortestForemost {
 
 /// Cost of a temporal walk Q as (arr(Q), hop(Q)) (for minimization by lexicographic order). 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Copy, Clone, Debug)]
-pub struct ShortestLatest(pub u32); // hop(Q)
+pub struct ShortestLatest(pub Hop); // hop(Q)
 
 impl Add for ShortestLatest {
     type Output = Self;
@@ -197,14 +194,14 @@ impl Add for ShortestLatest {
 }
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Copy, Clone, Debug)]
-pub struct ShortestLatestTarget(pub Reverse<Time>, pub u32); // arr(Q), hop(Q)
+pub struct ShortestLatestTarget(pub Reverse<Time>, pub Hop); // arr(Q), hop(Q)
 
 impl Cost for ShortestLatest {
     type TargetCost = ShortestLatestTarget;
-    fn infinite_cost() -> Self { ShortestLatest(u32::MAX) }
-    fn infinite_target_cost() -> Self::TargetCost { ShortestLatestTarget(Reverse(Time::MIN), u32::MAX) }
-    fn empty_target_cost() -> Self::TargetCost { ShortestLatestTarget(Reverse(Time::MAX), 0u32) }
-    fn edge_cost(_: &TEdge) -> Self { ShortestLatest(1u32) }
+    fn infinite_cost() -> Self { ShortestLatest(Hop::MAX) }
+    fn infinite_target_cost() -> Self::TargetCost { ShortestLatestTarget(Reverse(Time::MIN), Hop::MAX) }
+    fn empty_target_cost() -> Self::TargetCost { ShortestLatestTarget(Reverse(Time::MAX), 0) }
+    fn edge_cost(_: &TEdge) -> Self { ShortestLatest(1) }
     fn target_cost(&self, e: &TEdge) -> Self::TargetCost { ShortestLatestTarget(Reverse(e.arr()), self.0) }
 }
 
@@ -212,7 +209,7 @@ impl Cost for ShortestLatest {
 
 /// Cost of a temporal walk Q as (arr(Q) - dep(Q), hop(Q)) (for minimization by lexicographic order). 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Copy, Clone, Debug)]
-pub struct ShortestFastest(pub Reverse<Time>, pub u32); // (dep(Q), hop(Q))
+pub struct ShortestFastest(pub Reverse<Time>, pub Hop); // (dep(Q), hop(Q))
 
 impl Add for ShortestFastest {
     type Output = Self;
@@ -220,12 +217,12 @@ impl Add for ShortestFastest {
 }
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Copy, Clone, Debug)]
-pub struct ShortestFastestTarget(pub Time, pub u32); // (dep(Q) - arr(Q), hop(Q))
+pub struct ShortestFastestTarget(pub Time, pub Hop); // (dep(Q) - arr(Q), hop(Q))
 
 impl Cost for ShortestFastest {
     type TargetCost = ShortestFastestTarget;
-    fn infinite_cost() -> Self { ShortestFastest(Reverse(Time::MIN), u32::MAX) }
-    fn infinite_target_cost() -> Self::TargetCost { ShortestFastestTarget(Time::MAX, u32::MAX) }
+    fn infinite_cost() -> Self { ShortestFastest(Reverse(Time::MIN), Hop::MAX) }
+    fn infinite_target_cost() -> Self::TargetCost { ShortestFastestTarget(Time::MAX, Hop::MAX) }
     fn empty_target_cost() -> Self::TargetCost { ShortestFastestTarget(0, 0) }
     fn edge_cost(e: &TEdge) -> Self {
         if e.t <= Time::MIN { 
@@ -233,7 +230,7 @@ impl Cost for ShortestFastest {
                     (which is considered as infinite Fastest cost).", 
                     e.t, Time::MIN); 
         }
-        ShortestFastest(Reverse(e.t), 1u32) 
+        ShortestFastest(Reverse(e.t), 1) 
     } // Time:MIN is considered as infinite, , cannot use it
     fn target_cost(&self, e: &TEdge) -> Self::TargetCost { 
         assert!(e.arr() >= self.0.0);

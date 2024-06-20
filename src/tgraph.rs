@@ -17,7 +17,7 @@ pub struct TGraph {
     /// number of nodes (nodes are numbered from 0 to n-1)
     pub n: Node, 
 
-    /// number of temporal edges
+    /// number of temporal edges (tedges are identified by their index in edep)
     pub m: Eind, 
 
     /// tedges sorted by tail and departure time
@@ -219,12 +219,12 @@ impl TGraph {
         Self { n, m, edep: earr, u_fst, earr: earr_ind }
     }
 
-    /// Returns for each tedge (in order of earr) a couple (l,r) where corresponding
+    /// Returns for each tedge a couple (l,r) where corresponding
     /// edges in edep (those in edep[l..r]) beta-extend it (can follow it in a in beta-restless walk).
     pub fn extend_indexes(&self, beta: Time) -> Vec<(Eind, Eind)> {
         let mut l_v = self.u_fst.clone(); // included
         let mut r_v = self.u_fst.clone(); // not included
-        let mut ind: Vec<(Eind, Eind)> = Vec::with_capacity(self.m);
+        let mut ind: Vec<(Eind, Eind)> = vec![(0,0); self.m];
         for &i in self.earr.iter() {
             let e = & self.edep[i];
             let v = e.v;
@@ -235,7 +235,7 @@ impl TGraph {
             let mut r = max(r_v[v], l);
             while r < self.u_fst[v+1] && self.edep[r].t - arr <= beta { r += 1; }
             r_v[v] = r;
-            ind.push((l,r)); 
+            ind[i] = (l,r); 
         }
         ind
     }
@@ -358,23 +358,13 @@ pub mod tests {
     pub fn check_extend_indexes(tg: &TGraph, beta: Time, succ: &Vec<(Eind, Eind)>) -> () {
         eprintln!("{:?}", succ);
         // brute force check:
-        for (i, &ei) in tg.earr.iter().enumerate() {
-            let e = &tg.edep[ei];
+        for &i in tg.earr.iter() {
+            let e = &tg.edep[i];
             let &(l, r) = &succ[i];
             for j in 0..tg.m {
                 let f = &tg.edep[j];
                 assert_eq!(f.extends(e, beta), l <= j && j < r);
             }
-        }
-        // check non-decreasingness of l, and r:
-        let mut l_v = tg.u_fst.clone(); 
-        let mut r_v = tg.u_fst.clone();
-        for (i, &ei) in tg.earr.iter().enumerate() {
-            let &(l, r) = &succ[i];
-            let v = tg.edep[ei].v;
-            assert!(l >= l_v[v] && r >= r_v[v]);
-            l_v[v] = l;
-            r_v[v] = r;
         }
     }
 }

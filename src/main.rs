@@ -33,10 +33,10 @@ struct Opt {
     verbose: bool,
 
     /// Computation to perform:
-    /// `mc` or `min-cost-from` for single source minimum cost walks:
-    ///    compute minimum-cost walks from a source `s` (set with `-source`)
+    /// `soc` or `src-opt-cost` for single source optimum cost temporal walks:
+    ///    compute optimum-cost walks from a source `s` (set with `-source`)
     ///    and output for each node `t` the cost (see `-criterion`) of
-    ///    a minimum-cost st-walk.
+    ///    an optimum-cost st-walk.
     /// `p` or `print` for temporal edges (sorted by arrival time).
     #[structopt(short, long, default_value = "print", verbatim_doc_comment)]
     command: String,
@@ -107,20 +107,6 @@ fn main() {
 
     match opt.command.as_str() {
 
-        "mc" | "min-cost-from" => {
-            match opt.criterion.as_str() {
-                "foremost" | "Fo" => command::<cost::Foremost>(&tg, &opt),
-                "latest" | "L" => command::<cost::Latest>(&tg, &opt),
-                "fastest" | "Fa" => command::<cost::Fastest>(&tg, &opt),
-                "waiting" | "W" => command::<cost::Waiting>(&tg, &opt),
-                "shortest" | "S" => command::<cost::Shortest>(&tg, &opt),
-                "shortest-foremost" | "SFo" => command::<cost::ShortestForemost>(&tg, &opt),
-                "shortest-latest" | "SL" => command::<cost::ShortestLatest>(&tg, &opt),
-                "shortest-fastest" | "SFa" => command::<cost::ShortestFastest>(&tg, &opt),
-                _ => panic!("Cost '{}' not suppoted.", opt.criterion)
-            }
-        },
-
         "size" | "sz" => {
             println!("{} {}", tg.n, tg.m);
         }
@@ -137,20 +123,35 @@ fn main() {
             }
         },
 
+        _ => {
+            match opt.criterion.as_str() {
+                "foremost" | "Fo" => command::<cost::Foremost>(&tg, &opt),
+                "latest" | "L" => command::<cost::Latest>(&tg, &opt),
+                "fastest" | "Fa" => command::<cost::Fastest>(&tg, &opt),
+                "waiting" | "W" => command::<cost::Waiting>(&tg, &opt),
+                "shortest" | "S" => command::<cost::Shortest>(&tg, &opt),
+                "shortest-foremost" | "SFo" => command::<cost::ShortestForemost>(&tg, &opt),
+                "shortest-latest" | "SL" => command::<cost::ShortestLatest>(&tg, &opt),
+                "shortest-fastest" | "SFa" => command::<cost::ShortestFastest>(&tg, &opt),
+                _ => panic!("Cost '{}' not suppoted.", opt.criterion)
+            }
+        },
 
-        _ => panic!("Unkown command '{}'.", opt.command)
     };
 
 }
 
 fn command<C: cost::Cost>(tg: &TGraph, opt: &Opt) {
 
+    let beta = if opt.beta == -1 { Time::MAX } else { Time::try_from(opt.beta).expect("unexpected beta value") };
+    log::info!("use of beta={beta}");
+ 
     match opt.command.as_str() {
 
-        "mc" | "min-cost-from" => {
+        "soc" | "src-opt-cost" => {
             let mut tsweep: TSweep<C> = TSweep::new(&tg);
-            tsweep.scan(opt.source, opt.beta);
-            let opt_costs = tsweep.opt_costs();
+            tsweep.scan(opt.source, beta);
+            let opt_costs = tsweep.opt_costs(opt.source);
             for c in opt_costs {
                 println!("{:?}", c);
             }
