@@ -10,18 +10,18 @@ pub struct TSweep<'tg, C : Cost> {
 
 use std::collections::VecDeque;
 
-struct NodeInfo<C : Cost> { // info about tedges from a node u (forward phase)
-    intervs: VecDeque<Interv<C>>, // information about consecutive intervals of edges from u (in edgep)
-    l: Eind, // left bound in edep, intervals in intervs span l..r
-    r: Eind, // right bound in edep (excluded)
+struct NodeInfo<C : Cost> { // info about tedges from a node `u` during a scan of tedges (according to earr order)
+    intervs: VecDeque<Interv<C>>, // information about intervals of edges from u (see bellow)
+    l: Eind, // l..r is a sliding window in edep of tedges from `u` 
+    r: Eind, // that extend the currently scanned edge in earr 
 }
 
 #[derive(Debug)]
 struct Interv<C : Cost> { // an interval of edges from a given node v in edep
     l: Eind, // left bound in edep
     r: Eind, // right bound in edep (excluded)
-    cost: C, // minimum cost of walks reaching this interval (and that edges in the interval extend)
-    pred: Eind, // index of an edge ending such a walk
+    cost: C, // minimum cost of walks reaching this interval (and that tedges in the interval extend)
+    pred: Eind, // index of a tedge ending such a walk
 }
 
 use std::cmp::{min, max};
@@ -66,89 +66,83 @@ impl<'tg, C : Cost> TSweep<'tg, C> {
     }
 
    pub fn scan(&mut self, s: Node, beta: Time) {
-        //let succ = self.tg.extend_indexes(beta);
         let infty = Cost::infinite_cost();
         for &i in self.tg.earr.iter() {
-            let e = & self.tg.edep[i];
-            let e_arr = e.arr();
-
-            // ------------ finalize_tail e
-
-            // finalize edges with tail e.u from self.u_inf[e.u].l up to e
-            let ui = &mut self.u_inf[e.u];
-            while let Some(itv) = ui.intervs.front_mut() {
-                if itv.l <= i {
-                    let r = min(itv.r, i+1);
-                    for j in itv.l..r {
-                        self.min_cost[j] = itv.cost.clone() + C::edge_cost(e);
-                        self.pred[j] = itv.pred;
-                    }
-                    if r >= itv.r { ui.intervs.pop_front(); } // remove interval
-                    else { itv.l = r; break; } // truncate interval
-                } else {
-                    break;
-                }
+            self.finalize_tail(s, i);
+            if self.min_cost[i] < infty {
+                self.relax_head(i, beta);
             }
-
-            // edges from the source
-            if e.u == s {
-                for j in ui.l..=i {
-                    let c = C::edge_cost(&self.tg.edep[j]);
-                    if c <= self.min_cost[j] { 
-                        self.min_cost[j] = c;
-                        self.pred[j] = j;
-                    }
-                }
-            }
-
-            // update left of union of intervals
-            ui.l = i+1;
-
-            //  ----------- relax_head e
-
-            let e_min_cost = self.min_cost[i].clone();
-            //eprintln!("[{}] {:?}", e, e_min_cost);
-
-            if e_min_cost < infty {
-
-                // Compute the interval edep[l_e..r_e] of edges extending e:
-                let mut l_e = self.u_inf[e.v].l;
-                while l_e < self.tg.u_fst[e.v + 1] 
-                    && self.tg.edep[l_e].t < e_arr { l_e += 1; }
-
-                let mut r_e = max(l_e, self.u_inf[e.v].r);
-                while r_e < self.tg.u_fst[e.v + 1] 
-                    && self.tg.edep[r_e].t - e_arr <= beta { r_e += 1; }
-                //assert_eq!((l_e,r_e), succ[i]);
-
-                // Compute the interval edep[l_c..r_e] where e provides min-cost:
-                let vi = &mut self.u_inf[e.v];
-                let mut l_c = max(l_e, vi.r);
-
-                // Remove intervals with larger cost
-                while let Some(itv) = vi.intervs.back_mut() {
-                    if itv.r > l_e && itv.cost > e_min_cost { // larger cost
-                        l_c = max(l_e, itv.l);
-                        if itv.l >= l_e { vi.intervs.pop_back(); } // remove interval
-                        else { itv.r = l_e; break; } // truncate interval
-                    } else {
-                        break
-                    }
-                }
-
-                // add interval:
-                if l_c < r_e { // if l_c..r_e is not empty
-                    vi.intervs.push_back(Interv { 
-                        l: l_c, r: r_e, cost: e_min_cost, pred: i 
-                    });
-                }
-
-                // update right of union of intervals
-                vi.r = r_e;
-
-            }
-
         }
+    }
+
+    fn finalize_tail(&mut self, s: Node, i: Eind) {
+
+        let e = & self.tg.edep[i];
+
+        // finalize edges with tail e.u from l=self.u_inf[e.u].l up to e, that is tg.edep[l..i+1]
+        let ui = &mut self.u_inf[e.u];
+        while let Some(itv) = ui.intervs.front_mut() {
+            if itv.l <= i {
+                let r = min(itv.r, i+1);
+                for j in itv.l..r {
+                    self.min_cost[j] = itv.cost.clone() + C::edge_cost(e);
+                    self.pred[j] = itv.pred;
+                }
+                if r >= itv.r { ui.intervs.pop_front(); } // remove interval
+                else { itv.l = r; break; } // truncate interval
+            } else {
+                break;
+            }
+        }
+
+        // edges from the source
+        if e.u == s {
+            for j in ui.l..=i {
+                let c = C::edge_cost(&self.tg.edep[j]);
+                if c <= self.min_cost[j] { 
+                    self.min_cost[j] = c;
+                    self.pred[j] = j;
+                }
+            }
+        }
+
+        // update left of union of intervals
+        ui.l = i+1;
+    }
+
+    fn relax_head(&mut self, i: Eind, beta: Time) {
+
+        let e = & self.tg.edep[i];
+        let e_min_cost = self.min_cost[i].clone();
+
+        // Compute the interval edep[l_e..r_e] of edges extending e:
+        let (l_e, r_e) = self.tg.extend_window(e.v, self.u_inf[e.v].l, self.u_inf[e.v].r, e.arr(), beta);
+
+        // Compute the interval edep[l_c..r_e] where e provides min-cost:
+        let vi = &mut self.u_inf[e.v];
+        let mut l_c = max(l_e, vi.r);
+
+        // Remove intervals with larger cost
+        while let Some(itv) = vi.intervs.back_mut() {
+            if itv.r > l_e && itv.cost > e_min_cost { // larger cost
+                l_c = max(l_e, itv.l);
+                if itv.l >= l_e { vi.intervs.pop_back(); } // remove interval
+                else { itv.r = l_e; break; } // truncate interval
+            } else {
+                break
+            }
+        }
+
+        // add interval:
+        if l_c < r_e { // if l_c..r_e is not empty
+            vi.intervs.push_back(Interv { 
+                l: l_c, r: r_e, cost: e_min_cost, pred: i 
+            });
+        }
+
+        // update right of union of intervals
+        vi.r = r_e;
+
     }
 
     pub fn opt_costs(&self, src: Node) -> Vec<C::TargetCost> {

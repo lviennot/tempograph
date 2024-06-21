@@ -228,17 +228,37 @@ impl TGraph {
         for &i in self.earr.iter() {
             let e = & self.edep[i];
             let v = e.v;
-            let arr = e.arr();
-            let mut l = l_v[v];
-            while l < self.u_fst[v+1] && self.edep[l].t < arr { l += 1; }
+            let t_arr = e.arr();
+            let (l, r) = self.extend_window(v, l_v[v], r_v[v], t_arr, beta);
             l_v[v] = l;
-            let mut r = max(r_v[v], l);
-            while r < self.u_fst[v+1] && self.edep[r].t - arr <= beta { r += 1; }
             r_v[v] = r;
             ind[i] = (l,r); 
         }
         ind
     }
+
+    /// Returns the interval `l..r` of `self.edep` of tedges with departure time in `[t_arr,t_arr+beta]` on 
+    /// the right of `l_prev..r_prev`, that is with `l >= l_prev` and `r >= r_prev` assuming that 
+    /// if `r > l`, then the departure time of `edep[r-1]` is at most `t_arr+beta`.
+    /// Typically, `(l_prev,r_prev)` was returned by a call for `t_arr' <= t_arr` and same `beta` value.
+    #[inline(always)]
+    pub fn extend_window(&self, v: Node, l_prev: Eind, r_prev: Eind, t_arr: Time, beta: Time) -> (Eind, Eind) {
+        debug_assert!(l_prev >= self.u_fst[v] && r_prev <= self.u_fst[v + 1]);
+
+        debug_assert!(l_prev - 1 < self.u_fst[v] || self.edep[l_prev - 1].t <=t_arr);
+        let mut l = l_prev;
+        while l < self.u_fst[v + 1] 
+            && self.edep[l].t < t_arr { l += 1; }
+
+        debug_assert!(r_prev <= l || self.edep[r_prev - 1].t - t_arr <= beta);
+        let mut r = max(l, r_prev);
+        while r < self.u_fst[v + 1] 
+            && self.edep[r].t - t_arr <= beta { r += 1; }
+
+        (l, r)
+    }
+
+
 
 }
 
