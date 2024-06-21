@@ -14,6 +14,7 @@ struct NodeInfo<C : Cost> { // info about tedges from a node `u` during a scan o
     intervs: VecDeque<Interv<C>>, // information about intervals of edges from u (see bellow)
     l: Eind, // l..r is a sliding window in edep of tedges from `u` 
     r: Eind, // that extend the currently scanned edge in earr 
+    i_finalized: Eind, // index before which tedges `e` from `u` have been finalized (when the minimum cost of walks ending with `e` is known)
 }
 
 #[derive(Debug)]
@@ -43,9 +44,10 @@ impl<'tg, C : Cost> TSweep<'tg, C> {
         }
         for u in 0..tg.n {
             u_inf.push(NodeInfo { 
-                intervs: VecDeque::with_capacity(in_deg[u]/64), // max size is in_deg[v], but try to be smaller than tg
+                intervs: VecDeque::new(),
                 l: tg.u_fst[u] as Eind, 
                 r: tg.u_fst[u] as Eind,
+                i_finalized: tg.u_fst[u] as Eind,
             })
         }
 
@@ -62,10 +64,13 @@ impl<'tg, C : Cost> TSweep<'tg, C> {
             ui.intervs.clear();
             ui.l = self.tg.u_fst[u] as Eind;
             ui.r = self.tg.u_fst[u] as Eind;
+            ui.i_finalized = self.tg.u_fst[u] as Eind;
         }
     }
 
-   pub fn scan(&mut self, s: Node, beta: Time) {
+    /// Scan edges according to `tg.earr` ordering to compute minimum cost walks from `s` 
+    /// with maximum waiting time `beta`.
+    pub fn scan(&mut self, s: Node, beta: Time) {
         let infty = Cost::infinite_cost();
         for &i in self.tg.earr.iter() {
             self.finalize_tail(s, i);
@@ -75,11 +80,12 @@ impl<'tg, C : Cost> TSweep<'tg, C> {
         }
     }
 
+    /// Finalize edges from `tg.edep[i].u` up to `i` included.
     fn finalize_tail(&mut self, s: Node, i: Eind) {
 
         let e = & self.tg.edep[i];
 
-        // finalize edges with tail e.u from l=self.u_inf[e.u].l up to e, that is tg.edep[l..i+1]
+        // finalize edges with tail e.u in tg.edep[u_inf[e.u].i_finalized .. i+1]
         let ui = &mut self.u_inf[e.u];
         while let Some(itv) = ui.intervs.front_mut() {
             if itv.l <= i {
@@ -97,7 +103,7 @@ impl<'tg, C : Cost> TSweep<'tg, C> {
 
         // edges from the source
         if e.u == s {
-            for j in ui.l..=i {
+            for j in ui.i_finalized..=i {
                 let c = C::edge_cost(&self.tg.edep[j]);
                 if c <= self.min_cost[j] { 
                     self.min_cost[j] = c;
@@ -107,7 +113,9 @@ impl<'tg, C : Cost> TSweep<'tg, C> {
         }
 
         // update left of union of intervals
-        ui.l = i+1;
+        ui.i_finalized = i+1;
+        if i+1 > ui.l { ui.l = i+1 }
+
     }
 
     fn relax_head(&mut self, i: Eind, beta: Time) {
@@ -140,7 +148,8 @@ impl<'tg, C : Cost> TSweep<'tg, C> {
             });
         }
 
-        // update right of union of intervals
+        // update extend window
+        vi.l = l_e;
         vi.r = r_e;
 
     }
