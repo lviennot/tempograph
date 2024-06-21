@@ -6,7 +6,7 @@ pub mod cost;
 pub mod tsweep;
 pub mod tcloseness;
 
-use tcloseness::closeness;
+use tcloseness::*;
 use tgraph::*;
 use tsweep::TSweep;
 
@@ -61,6 +61,11 @@ struct Opt {
     /// consider only walks from that node.
     #[structopt(short, long, default_value = "1")]
     source: Node,
+
+    /// Number of threads to use (closeness from different source nodes
+    /// are computed in parallel).
+    #[structopt(short, long = "num-threads", default_value = "3")]
+    nthreads: u32,
 
     /// Input file: a temporal graph in the following format:
     /// an optional first line with node maximum number `n` 
@@ -125,7 +130,7 @@ fn main() {
         "c" | "closeness" => {
             let beta = if opt.beta == -1 { Time::MAX } else { Time::try_from(opt.beta).expect("unexpected beta value") };
             log::info!("use of beta={beta}");
-            let hc = closeness(&tg, beta);
+            let hc = if opt.nthreads == 1 { closeness(&tg, beta) } else { closeness_par(&tg, beta, opt.nthreads) };
             for c in hc { println!("{}", c); }
         },
 
