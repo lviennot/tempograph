@@ -4,8 +4,8 @@ use crate::cost::*;
 
 use dsi_progress_logger::*;
 
-pub fn closeness(tg: &TGraph, beta: Time) -> Vec<f64> {
-    let mut tsweep: TSweep<Shortest> = TSweep::new(&tg);
+pub fn closeness<C: Cost>(tg: &TGraph, beta: Time) -> Vec<f64> {
+    let mut tsweep: TSweep<C> = TSweep::new(&tg);
     let mut pl = ProgressLogger::default();
     pl.expected_updates(Some(tg.n as usize))
         .display_memory(true)
@@ -14,18 +14,18 @@ pub fn closeness(tg: &TGraph, beta: Time) -> Vec<f64> {
     (0..tg.n).map(|s| -> f64 {
         tsweep.clear();
         tsweep.scan(s, beta);
-        let hc = harmonic_centrality(s, tsweep.opt_costs(s));
+        let hc = harmonic_centrality::<C>(s, tsweep.opt_costs(s));
         pl.update();
         if s == tg.n - 1 { pl.stop() }
         hc
     }).collect()
 }
 
-fn harmonic_centrality(s: Node, dist: Vec<Hop>) -> f64 {
+fn harmonic_centrality<C: Cost>(s: Node, dist: Vec<C::TargetCost>) -> f64 {
     let mut hc = 0.;
-    let infty: u32 = Shortest::infinite_target_cost();
+    let infty = C::infinite_target_cost();
     for t in 0..dist.len() {
-        if t != s && dist[t] < infty { hc += 1. / dist[t] as f64 }
+        if t != s && dist[t] < infty { hc += 1. / C::target_cost_to_distance(dist[t].clone()) as f64 }
     }
     hc
 }
@@ -33,7 +33,7 @@ fn harmonic_centrality(s: Node, dist: Vec<Hop>) -> f64 {
 use std::thread;
 use std::sync::mpsc;
 
-pub fn closeness_par(tg: &TGraph, beta: Time, nthread: u32) -> Vec<f64> {
+pub fn closeness_par<C: Cost>(tg: &TGraph, beta: Time, nthread: u32) -> Vec<f64> {
     log::info!("Using {nthread} threads.");
     let (tx, rx) = mpsc::channel();
     thread::scope(|s| {
@@ -50,13 +50,13 @@ pub fn closeness_par(tg: &TGraph, beta: Time, nthread: u32) -> Vec<f64> {
                     pl.start("Computing closeness...");
                     plopt = Some(pl);
                 }
-                let mut tsweep: TSweep<Shortest> = TSweep::new(&tg);
+                let mut tsweep: TSweep<C> = TSweep::new(&tg);
                 let mut hc = vec![0.; tg.n];
                 for s in 0..tg.n  {
                     if s % nthread as Node == i_th {
                         tsweep.clear();
                         tsweep.scan(s, beta);
-                        hc[s] = harmonic_centrality(s, tsweep.opt_costs(s))
+                        hc[s] = harmonic_centrality::<C>(s, tsweep.opt_costs(s))
                     }
                     if i_th == 0 { plopt.as_mut().expect("no logger").update() }
                 }

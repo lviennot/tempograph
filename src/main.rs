@@ -48,7 +48,7 @@ struct Opt {
     /// `SFo`, `SL`, `SFa` for shortest foremost (shortest walks among foremost 
     /// ones), shortest latest, shortest fastest,
     /// `W` for minimum waiting time.  
-    #[structopt(short = "C", long, default_value = "SFa", verbatim_doc_comment)]
+    #[structopt(short = "C", long, default_value = "S", verbatim_doc_comment)]
     criterion: String,
 
     /// Maximum waiting time: a temporal walk is restless if the maximum time between 
@@ -127,13 +127,6 @@ fn main() {
             }
         },
 
-        "c" | "closeness" => {
-            let beta = if opt.beta == -1 { Time::MAX } else { Time::try_from(opt.beta).expect("unexpected beta value") };
-            log::info!("use of beta={beta}");
-            let hc = if opt.nthreads == 1 { closeness(&tg, beta) } else { closeness_par(&tg, beta, opt.nthreads) };
-            for c in hc { println!("{}", c); }
-        },
-
         _ => {
             match opt.criterion.as_str() {
                 "foremost" | "Fo" => command::<cost::Foremost>(&tg, &opt),
@@ -167,6 +160,11 @@ fn command<C: cost::Cost>(tg: &TGraph, opt: &Opt) {
             for c in opt_costs {
                 println!("{:?}", c);
             }
+        },
+
+        "c" | "closeness" => {
+            let hc = if opt.nthreads == 1 { closeness::<C>(&tg, beta) } else { closeness_par::<C>(&tg, beta, opt.nthreads) };
+            for c in hc { println!("{}", c); }
         },
 
         _ => panic!("Unkown command '{}'.", opt.command)

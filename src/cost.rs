@@ -11,6 +11,7 @@ pub trait Cost : PartialOrd + Add<Output = Self> + Sized + Clone + std::fmt::Deb
     fn empty_target_cost() -> Self::TargetCost; // target cost of an empty walk
     fn edge_cost(e: &TEdge) -> Self;
     fn target_cost(&self, e: &TEdge) -> Self::TargetCost;
+    fn target_cost_to_distance(c : Self::TargetCost) -> f64;
 }
 
 
@@ -31,13 +32,14 @@ impl Cost for Foremost {
     fn empty_target_cost() -> Self::TargetCost { Time::MIN }
     fn edge_cost(_: &TEdge) -> Self { Foremost(false) }
     fn target_cost(&self, e: &TEdge) -> Self::TargetCost { e.arr() }
+    fn target_cost_to_distance(c : Self::TargetCost) -> f64 { c as f64 }
 }
 
 
 
-/// Cost of a temporal walk Q as its arrival time arr(Q) (for minimization).
+/// Cost of a temporal walk Q as its arrival time arr(Q) (for maximization).
 #[derive(PartialEq, Eq, PartialOrd, Ord, Copy, Clone, Debug)]
-pub struct Latest(pub bool); // true for infinite, false otherwise
+pub struct Latest(pub bool); // true for not reachable, false otherwise
 
 impl Add for Latest {
     type Output = Self; 
@@ -51,6 +53,7 @@ impl Cost for Latest {
     fn empty_target_cost() -> Self::TargetCost { Reverse(Time::MAX) }
     fn edge_cost(_: &TEdge) -> Self { Latest(false) }
     fn target_cost(&self, e: &TEdge) -> Self::TargetCost { Reverse(e.arr()) }
+    fn target_cost_to_distance(c : Self::TargetCost) -> f64 { -(c.0 as f64) }
 }
 
 
@@ -82,6 +85,7 @@ impl Cost for Fastest {
         if self.0.0 == Time::MIN { Self::infinite_target_cost() } // Time::MIN is consdiered infinite
         else { e.arr() - self.0.0 }
     }
+    fn target_cost_to_distance(c : Self::TargetCost) -> f64 { 1.0 + c as f64 } // +1 because of possible zero delay edges
 }
 
 
@@ -113,6 +117,7 @@ impl Cost for Waiting {
         if self.0 == Time::MIN { Self::infinite_target_cost() } // Time::MIN is consdired infinite
         else { e.arr() - self.0 - self.1 }
     }
+    fn target_cost_to_distance(c : Self::TargetCost) -> f64 { 1.0 + c as f64 } // min. waiting time can be zero
 }
 
 impl PartialEq for Waiting {
@@ -157,6 +162,7 @@ impl Cost for Shortest {
     fn empty_target_cost() -> Self::TargetCost { 0 }
     fn edge_cost(_: &TEdge) -> Self { Shortest(1) }
     fn target_cost(&self, _: &TEdge) -> Self::TargetCost { self.0 }
+    fn target_cost_to_distance(c : Self::TargetCost) -> f64 { c as f64 }
 }
 
 
@@ -180,6 +186,7 @@ impl Cost for ShortestForemost {
     fn empty_target_cost() -> Self::TargetCost { ShortestForemostTarget(Time::MIN, 0) }
     fn edge_cost(_: &TEdge) -> Self { ShortestForemost(1) }
     fn target_cost(&self, e: &TEdge) -> Self::TargetCost { ShortestForemostTarget(e.arr(), self.0) }
+    fn target_cost_to_distance(c : Self::TargetCost) -> f64 { c.0 as f64 }
 }
 
 
@@ -203,6 +210,7 @@ impl Cost for ShortestLatest {
     fn empty_target_cost() -> Self::TargetCost { ShortestLatestTarget(Reverse(Time::MAX), 0) }
     fn edge_cost(_: &TEdge) -> Self { ShortestLatest(1) }
     fn target_cost(&self, e: &TEdge) -> Self::TargetCost { ShortestLatestTarget(Reverse(e.arr()), self.0) }
+    fn target_cost_to_distance(c : Self::TargetCost) -> f64 { -(c.0.0 as f64) }
 }
 
 
@@ -237,6 +245,7 @@ impl Cost for ShortestFastest {
         if self.0.0 == Time::MIN { Self::infinite_target_cost() } // self is considered infinite
         else { ShortestFastestTarget(e.arr() - self.0.0, self.1) }
     }
+    fn target_cost_to_distance(c : Self::TargetCost) -> f64 { 1.0 + c.0 as f64 } // shortest duration can be zero
 }
 
 
