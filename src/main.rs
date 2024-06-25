@@ -132,6 +132,7 @@ fn main() {
                 "foremost" | "Fo" => command::<cost::Foremost>(&tg, &opt),
                 "latest" | "L" => command::<cost::Latest>(&tg, &opt),
                 "fastest" | "Fa" => command::<cost::Fastest>(&tg, &opt),
+                "delay-sum" | "DS" => command::<cost::DelaySum>(&tg, &opt),
                 "waiting" | "W" => command::<cost::Waiting>(&tg, &opt),
                 "shortest" | "S" => command::<cost::Shortest>(&tg, &opt),
                 "shortest-foremost" | "SFo" => command::<cost::ShortestForemost>(&tg, &opt),

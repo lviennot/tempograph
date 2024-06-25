@@ -88,7 +88,24 @@ impl Cost for Fastest {
     fn target_cost_to_distance(c : Self::TargetCost) -> f64 { c as f64 } // +1.0 if possible zero delay edges ?
 }
 
+/// Cost of a temporal walk Q as its sum of delays `sum_{e in Q} e.d`.
+#[derive(PartialEq, Eq, PartialOrd, Ord, Copy, Clone, Debug)]
+pub struct DelaySum(pub Time); // Cost of Q is sum_{e in Q} e.d
 
+impl Add for DelaySum {
+    type Output = Self;
+    fn add(self, rhs: Self) -> Self::Output { DelaySum(self.0 + rhs.0) }
+}
+
+impl Cost for DelaySum {
+    type TargetCost = Time;
+    fn infinite_cost() -> Self { DelaySum(Time::MAX) }
+    fn infinite_target_cost() -> Self::TargetCost { Time::MAX }
+    fn empty_target_cost() -> Self::TargetCost { 0 as Time }
+    fn edge_cost(e: &TEdge) -> Self { DelaySum(e.d) }
+    fn target_cost(&self, _: &TEdge) -> Self::TargetCost { self.0 }
+    fn target_cost_to_distance(c : Self::TargetCost) -> f64 { c as f64 } // +1.0 if possible zero delay edges ?
+}
 
 /// Cost of a temporal walk Q as its waiting time (for minimization). 
 ///   (The waiting time of Q is arr(Q) - dep(Q) - sum_{e \in Q} e.d).
