@@ -34,6 +34,9 @@ use std::thread;
 use std::sync::mpsc;
 
 pub fn closeness_par<C: Cost>(tg: &TGraph, beta: Time, nthread: u32) -> Vec<f64> {
+    let n_th_dft = std::thread::available_parallelism()
+        .unwrap_or(std::num::NonZeroUsize::new(2).unwrap()).get() as u32;
+    let nthread = if nthread > 0 { nthread } else { n_th_dft };
     log::info!("Using {nthread} threads.");
     let (tx, rx) = mpsc::channel();
     thread::scope(|s| {
