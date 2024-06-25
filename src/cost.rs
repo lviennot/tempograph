@@ -85,7 +85,7 @@ impl Cost for Fastest {
         if self.0.0 == Time::MIN { Self::infinite_target_cost() } // Time::MIN is consdiered infinite
         else { e.arr() - self.0.0 }
     }
-    fn target_cost_to_distance(c : Self::TargetCost) -> f64 { 1.0 + c as f64 } // +1 because of possible zero delay edges
+    fn target_cost_to_distance(c : Self::TargetCost) -> f64 { c as f64 } // +1.0 if possible zero delay edges ?
 }
 
 
@@ -245,7 +245,7 @@ impl Cost for ShortestFastest {
         if self.0.0 == Time::MIN { Self::infinite_target_cost() } // self is considered infinite
         else { ShortestFastestTarget(e.arr() - self.0.0, self.1) }
     }
-    fn target_cost_to_distance(c : Self::TargetCost) -> f64 { 1.0 + c.0 as f64 } // shortest duration can be zero
+    fn target_cost_to_distance(c : Self::TargetCost) -> f64 { 1.0 + c.0 as f64 } // in case shortest duration can be zero, we have the SFa option
 }
 
 
