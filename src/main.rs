@@ -45,9 +45,11 @@ struct Opt {
     /// `Fo` for foremost (with earliest arrival time),
     /// `L` for latest departure time,
     /// `Fa` for fastest (minimum difference between arrival and departure times),
-    /// `SFo`, `SL`, `SFa` for shortest foremost (shortest walks among foremost 
-    /// ones), shortest latest, shortest fastest,
-    /// `W` for minimum waiting time.  
+    /// `W` for minimum waiting time,
+    /// `DS` for minimum sum of delays,  
+    /// `SFo`, `SL`, `SFa`, `SW`, `SDS` for shortest foremost (shortest walks among 
+    /// foremost ones), shortest latest, shortest fastest, shortest with minimum waiting,
+    /// shortest with minimum sum of delays.
     #[structopt(short = "C", long, default_value = "S", verbatim_doc_comment)]
     criterion: String,
 
