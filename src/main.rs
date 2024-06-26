@@ -138,6 +138,8 @@ fn main() {
                 "shortest-foremost" | "SFo" => command::<cost::ShortestForemost>(&tg, &opt),
                 "shortest-latest" | "SL" => command::<cost::ShortestLatest>(&tg, &opt),
                 "shortest-fastest" | "SFa" => command::<cost::ShortestFastest>(&tg, &opt),
+                "shortest-delay-sum" | "SDS" => command::<cost::ShortestDelaySum>(&tg, &opt),
+                "shortest-waiting" | "SW" => command::<cost::ShortestWaiting>(&tg, &opt),
                 _ => panic!("Cost '{}' not suppoted.", opt.criterion)
             }
         },

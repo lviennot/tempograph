@@ -3,7 +3,7 @@ use crate::tgraph::{Time, TEdge};
 use std::ops::Add;
 use std::cmp::Reverse;
 
-pub trait Cost : PartialOrd + Add<Output = Self> + Sized + Clone + std::fmt::Debug {
+pub trait Cost : Ord + Add<Output = Self> + Sized + Clone + std::fmt::Debug {
     type TargetCost : Ord + Clone + std::fmt::Debug;
 
     fn infinite_cost() -> Self;
@@ -183,7 +183,6 @@ impl Cost for Shortest {
 }
 
 
-
 /// Cost of a temporal walk Q as (arr(Q), hop(Q)) (for minimization by lexicographic order). 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Copy, Clone, Debug)]
 pub struct ShortestForemost(pub u32); // hop(Q)
@@ -232,40 +231,31 @@ impl Cost for ShortestLatest {
 
 
 
-/// Cost of a temporal walk Q as (arr(Q) - dep(Q), hop(Q)) (for minimization by lexicographic order). 
+/// Generic shortest among minimum walks for another criterion
 #[derive(PartialEq, Eq, PartialOrd, Ord, Copy, Clone, Debug)]
-pub struct ShortestFastest(pub Reverse<Time>, pub Hop); // (dep(Q), hop(Q))
+pub struct ShortestOf<C: Cost>(pub C, pub Hop); // lexicographic min of (cost(Q), hop(Q))
 
-impl Add for ShortestFastest {
+impl<C: Cost> Add for ShortestOf<C> {
     type Output = Self;
-    fn add(self, rhs: Self) -> Self::Output { ShortestFastest(self.0, self.1 + rhs.1) }
+    fn add(self, rhs: Self) -> Self::Output { ShortestOf(self.0 + rhs.0, self.1 + rhs.1) }
 }
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Copy, Clone, Debug)]
-pub struct ShortestFastestTarget(pub Time, pub Hop); // (dep(Q) - arr(Q), hop(Q))
+pub struct ShortestOfTarget<C: Cost>(pub C::TargetCost, pub Hop); // targetcost(Q), hop(Q)
 
-impl Cost for ShortestFastest {
-    type TargetCost = ShortestFastestTarget;
-    fn infinite_cost() -> Self { ShortestFastest(Reverse(Time::MIN), Hop::MAX) }
-    fn infinite_target_cost() -> Self::TargetCost { ShortestFastestTarget(Time::MAX, Hop::MAX) }
-    fn empty_target_cost() -> Self::TargetCost { ShortestFastestTarget(0, 0) }
-    fn edge_cost(e: &TEdge) -> Self {
-        if e.t <= Time::MIN { 
-            panic!("Time t={} is expected to be greater than Time::MIN={} \
-                    (which is considered as infinite Fastest cost).", 
-                    e.t, Time::MIN); 
-        }
-        ShortestFastest(Reverse(e.t), 1) 
-    } // Time:MIN is considered as infinite, , cannot use it
-    fn target_cost(&self, e: &TEdge) -> Self::TargetCost { 
-        assert!(e.arr() >= self.0.0);
-        if self.0.0 == Time::MIN { Self::infinite_target_cost() } // self is considered infinite
-        else { ShortestFastestTarget(e.arr() - self.0.0, self.1) }
-    }
-    fn target_cost_to_distance(c : Self::TargetCost) -> f64 { 1.0 + c.0 as f64 } // in case shortest duration can be zero, we have the SFa option
+impl<C: Cost> Cost for ShortestOf<C> {
+    type TargetCost = ShortestOfTarget<C>;
+    fn infinite_cost() -> Self { ShortestOf(C::infinite_cost(), Hop::MAX) }
+    fn infinite_target_cost() -> Self::TargetCost { ShortestOfTarget(C::infinite_target_cost(), Hop::MAX) }
+    fn empty_target_cost() -> Self::TargetCost { ShortestOfTarget(C::empty_target_cost(), 0) }
+    fn edge_cost(e: &TEdge) -> Self { ShortestOf(C::edge_cost(e), 1) }
+    fn target_cost(&self, e: &TEdge) -> Self::TargetCost { ShortestOfTarget(C::target_cost(&self.0, e), self.1) }
+    fn target_cost_to_distance(c : Self::TargetCost) -> f64 { C::target_cost_to_distance(c.0) }
 }
 
-
+pub type ShortestFastest = ShortestOf<Fastest>;
+pub type ShortestWaiting = ShortestOf<Waiting>;
+pub type ShortestDelaySum = ShortestOf<DelaySum>;
 
 #[cfg(test)]
 mod cost_tests {
