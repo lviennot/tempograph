@@ -44,7 +44,7 @@ struct Opt {
     /// `S` for shortest (in number of temporal edges),
     /// `Fo` for foremost (with earliest arrival time),
     /// `L` for latest departure time,
-    /// `Fa` for fastest (minimum difference between arrival and departure times),
+    /// `Fa` for fastest (minimum time difference between arrival and departure),
     /// `W` for minimum waiting time,
     /// `DS` for minimum sum of delays,  
     /// `SFo`, `SL`, `SFa`, `SW`, `SDS` for shortest foremost (shortest walks among 
