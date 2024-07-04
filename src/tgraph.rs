@@ -61,6 +61,7 @@ impl fmt::Display for TEdge {
 }
 impl TEdge {
     /// Returns the arrival time of this [`TEdge`].
+    #[inline(always)]
     pub fn arr(&self) -> Time {
         self.t + self.d
     }
