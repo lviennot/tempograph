@@ -26,7 +26,7 @@ pub fn shortest_closeness(tg: &TGraph, beta: Time) -> Vec<f64> {
     let succ = tg.extend_indexes(beta);
     let mut hc = vec![0.; tg.n];
     for s in 0..tg.n {
-        let dist = tbfs(tg, &succ, beta, s);
+        let dist = if beta == Time::MAX { tbfs_inf(tg, &succ, beta, s) } else { tbfs(tg, &succ, beta, s) };
         hc[s] = harmonic_centrality::<Shortest>(s, dist);
     }
     hc
