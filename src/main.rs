@@ -5,6 +5,7 @@ pub mod tgraph;
 pub mod cost;
 pub mod tsweep;
 pub mod tcloseness;
+pub mod tbfs;
 
 use tcloseness::*;
 use tgraph::*;
@@ -127,6 +128,12 @@ fn main() {
             for e in tg.edep.iter() {
                 println!("{}", e);
             }
+        },
+
+        "sc" | "shortest-closeness" => {
+            let beta = if opt.beta == -1 { Time::MAX } else { Time::try_from(opt.beta).expect("unexpected beta value") };
+            let hc = shortest_closeness(&tg, beta);
+            for c in hc { println!("{}", c); }
         },
 
         _ => {

@@ -1,6 +1,7 @@
 use crate::tgraph::*;
 use crate::tsweep::*;
 use crate::cost::*;
+use crate::tbfs::*;
 
 use dsi_progress_logger::*;
 
@@ -19,6 +20,16 @@ pub fn closeness<C: Cost>(tg: &TGraph, beta: Time) -> Vec<f64> {
         if s == tg.n - 1 { pl.stop() }
         hc
     }).collect()
+}
+
+pub fn shortest_closeness(tg: &TGraph, beta: Time) -> Vec<f64> {
+    let succ = tg.extend_indexes(beta);
+    let mut hc = vec![0.; tg.n];
+    for s in 0..tg.n {
+        let dist = tbfs(tg, &succ, beta, s);
+        hc[s] = harmonic_centrality::<Shortest>(s, dist);
+    }
+    hc
 }
 
 fn harmonic_centrality<C: Cost>(s: Node, dist: Vec<C::TargetCost>) -> f64 {
