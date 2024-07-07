@@ -32,6 +32,16 @@ pub fn shortest_closeness(tg: &TGraph, beta: Time) -> Vec<f64> {
     hc
 }
 
+pub fn top_shortest_closeness(tg: &TGraph, beta: Time) -> f64 {
+    let succ = tg.extend_indexes(beta);
+    let mut hc_max = 0.;
+    for s in 0..tg.n {
+        let hc = if beta == Time::MAX { tbfs_inf_prune(tg, &succ, s, hc_max) } else { tbfs_prune(tg, &succ, s, hc_max) };
+        if hc > hc_max { hc_max = hc }
+    }
+    hc_max
+}
+
 fn harmonic_centrality<C: Cost>(s: Node, dist: Vec<C::TargetCost>) -> f64 {
     let mut hc = 0.;
     let infty = C::infinite_target_cost();

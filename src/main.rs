@@ -136,6 +136,12 @@ fn main() {
             for c in hc { println!("{}", c); }
         },
 
+        "tsc" | "top-shortest-closeness" => {
+            let beta = if opt.beta == -1 { Time::MAX } else { Time::try_from(opt.beta).expect("unexpected beta value") };
+            let top_hc = top_shortest_closeness(&tg, beta);
+            println!("{}", top_hc);
+        },
+
         _ => {
             match opt.criterion.as_str() {
                 "foremost" | "Fo" => command::<cost::Foremost>(&tg, &opt),
