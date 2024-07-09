@@ -137,3 +137,21 @@ pub fn topological_sort<G: Graph>(g: &G) -> Vec<Node> {
     }
     dfs.exit_order.into_iter().rev().collect()
 }
+
+pub fn acyclic<G: Graph>(g: &G) -> bool {
+    let mut dfs = DFS::new(g.n());
+    dfs.dfs_all(g);
+    // check order
+    let mut revrank = vec![g.n(); g.n()];
+    for (i, &v) in dfs.exit_order.iter().enumerate() {
+        revrank[v] = i;
+    } 
+    for u in 0..g.n() as Node {
+        for &v in g.neighbors(u) {
+            if revrank[u] <= revrank[v] {
+                return false
+            }
+        }
+    }
+    return true
+}

@@ -28,6 +28,11 @@ pub struct TGraph {
 
     /// indexex of tedges (in edep) sorted by arrival time
     pub earr: Vec<Eind>, 
+
+    /// Is the temporal graph acyclic (i.e., all snapshots of zero-delay edges at any time are acyclic).
+    /// In that case, `earr` is topologically sorted: any temporal walk must respect `earr` in the 
+    /// sense that its edges appear in order of the walk in `earr`. 
+    pub acyclic: bool,
 }
 
 
@@ -145,7 +150,8 @@ impl TGraph {
 
         earr.sort_by(|e,f| e.cmp_arr(&f));
 
-        // topological sort of zero delay edges:
+        let mut acyclic = true; 
+        // try topological sort of zero delay edges:
         let mut index: HashMap<Node, graph::Node> = HashMap::new();
         let mut index_orig: Vec<Node> = vec![n as Node; n];
         let mut topord_rank: Vec<Node> = vec![n as Node; n];
@@ -179,13 +185,17 @@ impl TGraph {
                         g.add_arc(index_nb(&e.u), index_nb(&e.v), k);
                     }
                     // sort
-                    let mut rank: Node = 0;
-                    for u in graph::topological_sort(&g) {
-                        let v = index_orig[u];
-                        topord_rank[v] = rank;
-                        rank += 1;
+                    if graph::acyclic(&g) {
+                        let mut rank: Node = 0;
+                        for u in graph::topological_sort(&g) {
+                            let v = index_orig[u];
+                            topord_rank[v] = rank;
+                            rank += 1;
+                        }
+                        earr[i..j].sort_by_key(|e| topord_rank[e.u]);
+                    } else {
+                        acyclic = false;
                     }
-                    earr[i..j].sort_by_key(|e| topord_rank[e.u]);
                 }
                 i = j;
             } else {
@@ -217,7 +227,7 @@ impl TGraph {
             assert_eq!(&check[j], &earr[i]);
         }
 
-        Self { n, m, edep: earr, u_fst, earr: earr_ind }
+        Self { n, m, edep: earr, u_fst, earr: earr_ind, acyclic }
     }
 
     /// Returns for each tedge a couple (l,r) where corresponding

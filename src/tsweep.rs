@@ -71,6 +71,7 @@ impl<'tg, C : Cost> TSweep<'tg, C> {
     /// Scan edges according to `tg.earr` ordering to compute minimum cost walks from `s` 
     /// with maximum waiting time `beta`.
     pub fn scan(&mut self, s: Node, beta: Time) {
+        assert!(self.tg.acyclic);
         let infty = Cost::infinite_cost();
         for &i in self.tg.earr.iter() {
             self.finalize_tail(s, i);
