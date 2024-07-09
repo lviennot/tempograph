@@ -123,35 +123,28 @@ impl DFS {
 pub fn topological_sort<G: Graph>(g: &G) -> Vec<Node> {
     let mut dfs = DFS::new(g.n());
     dfs.dfs_all(g);
-    // check order
-    let mut revrank = vec![g.n(); g.n()];
-    for (i, &v) in dfs.exit_order.iter().enumerate() {
-        revrank[v] = i;
-    } 
-    for u in 0..g.n() as Node {
-        for &v in g.neighbors(u) {
-            if revrank[u] <= revrank[v] {
-                panic!("directed cycle detected")
-            }
-        }
-    }
     dfs.exit_order.into_iter().rev().collect()
 }
 
-pub fn acyclic<G: Graph>(g: &G) -> bool {
-    let mut dfs = DFS::new(g.n());
-    dfs.dfs_all(g);
-    // check order
-    let mut revrank = vec![g.n(); g.n()];
-    for (i, &v) in dfs.exit_order.iter().enumerate() {
-        revrank[v] = i;
+pub fn has_topological_order<G: Graph>(g: &G, ordering: &Vec<Node>) -> bool {
+    let mut rank = vec![g.n(); g.n()];
+    for (i, &v) in ordering.iter().enumerate() {
+        rank[v] = i;
     } 
     for u in 0..g.n() as Node {
         for &v in g.neighbors(u) {
-            if revrank[u] <= revrank[v] {
+            if rank[u] >= rank[v] {
                 return false
             }
         }
     }
     return true
 }
+
+pub fn acyclic<G: Graph>(g: &G) -> bool {
+    let ordering = topological_sort(g);
+    has_topological_order(g, &ordering)
+}
+
+// Tarjan, Robert E. (1972), "Depth-first search and linear graph algorithms", SIAM Journal on Computing, 1 (2): 146–160, CiteSeerX 10.1.1.327.8418, doi:10.1137/0201010
+// TODO

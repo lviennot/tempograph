@@ -185,17 +185,13 @@ impl TGraph {
                         g.add_arc(index_nb(&e.u), index_nb(&e.v), k);
                     }
                     // sort
-                    if graph::acyclic(&g) {
-                        let mut rank: Node = 0;
-                        for u in graph::topological_sort(&g) {
-                            let v = index_orig[u];
-                            topord_rank[v] = rank;
-                            rank += 1;
-                        }
-                        earr[i..j].sort_by_key(|e| topord_rank[e.u]);
-                    } else {
-                        acyclic = false;
+                    let ordering = graph::topological_sort(&g);
+                    acyclic = acyclic && graph::has_topological_order(&g, &ordering);
+                    for (r, u) in ordering.into_iter().enumerate() {
+                        let v = index_orig[u];
+                        topord_rank[v] = r as Node;
                     }
+                    earr[i..j].sort_by_key(|e| topord_rank[e.u]);
                 }
                 i = j;
             } else {
