@@ -22,6 +22,15 @@ pub fn closeness<C: Cost>(tg: &TGraph, beta: Time) -> Vec<f64> {
     }).collect()
 }
 
+fn harmonic_centrality<C: Cost>(s: Node, dist: Vec<C::TargetCost>) -> f64 {
+    let mut hc = 0.;
+    let infty = C::infinite_target_cost();
+    for t in 0..dist.len() {
+        if t != s && dist[t] < infty { hc += 1. / C::target_cost_to_distance(dist[t].clone()) as f64 }
+    }
+    hc
+}
+
 pub fn shortest_closeness(tg: &TGraph, beta: Time) -> Vec<f64> {
     let succ = tg.extend_indexes(beta);
     let mut hc = vec![0.; tg.n];
@@ -42,17 +51,40 @@ pub fn top_shortest_closeness(tg: &TGraph, beta: Time) -> f64 {
     hc_max
 }
 
-fn harmonic_centrality<C: Cost>(s: Node, dist: Vec<C::TargetCost>) -> f64 {
-    let mut hc = 0.;
-    let infty = C::infinite_target_cost();
-    for t in 0..dist.len() {
-        if t != s && dist[t] < infty { hc += 1. / C::target_cost_to_distance(dist[t].clone()) as f64 }
-    }
+use std::thread;
+use std::sync::{Arc, Mutex, mpsc};
+
+pub fn top_shortest_closeness_par(tg: &TGraph, beta: Time, nthread: u32) -> f64 {
+    let succ = tg.extend_indexes(beta);
+    let succ_ref = & succ;
+    let n_th_dft = std::thread::available_parallelism()
+        .unwrap_or(std::num::NonZeroUsize::new(2).unwrap()).get() as u32;
+    let nthread = if nthread > 0 { nthread } else { n_th_dft };
+    log::info!("Using {nthread} threads.");
+    let hc_max_all = Arc::new(Mutex::new(0.));
+    thread::scope(|s| {
+        for i_th in 0..nthread as Node {
+            let hc_max_all = Arc::clone(&hc_max_all);
+            s.spawn(move || {
+                let mut hc_max = 0.;
+                for s in 0..tg.n  {
+                    if s % nthread as Node == i_th {
+                        let hc_s = if beta == Time::MAX { tbfs_inf_prune(tg, succ_ref, s, hc_max) } else { tbfs_prune(tg, succ_ref, s, hc_max) };
+                        if hc_s > hc_max {
+                            hc_max = hc_s;
+                            if hc_max > *hc_max_all.lock().unwrap() {
+                                let mut hc_max_all = hc_max_all.lock().unwrap();
+                                *hc_max_all = hc_max;
+                            }
+                        }
+                    }
+                }
+            });
+        }
+    });
+    let hc = *hc_max_all.lock().unwrap();
     hc
 }
-
-use std::thread;
-use std::sync::mpsc;
 
 pub fn closeness_par<C: Cost>(tg: &TGraph, beta: Time, nthread: u32) -> Vec<f64> {
     let n_th_dft = std::thread::available_parallelism()

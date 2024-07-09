@@ -138,7 +138,7 @@ fn main() {
 
         "tsc" | "top-shortest-closeness" => {
             let beta = if opt.beta == -1 { Time::MAX } else { Time::try_from(opt.beta).expect("unexpected beta value") };
-            let top_hc = top_shortest_closeness(&tg, beta);
+            let top_hc = if opt.nthreads == 1 { top_shortest_closeness(&tg, beta) } else { top_shortest_closeness_par(&tg, beta, opt.nthreads) };
             println!("{}", top_hc);
         },
 
