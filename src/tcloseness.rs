@@ -51,6 +51,42 @@ pub fn top_shortest_closeness(tg: &TGraph, beta: Time) -> f64 {
     hc_max
 }
 
+pub fn top_k_shortest_closeness(tg: &TGraph, beta: Time, k: Node) -> Vec<Node> {
+    let succ = tg.extend_indexes(beta);
+    let mut hc = vec![0.; k+1];
+    let mut top = vec![0; k+1];
+    for s in 1..k+1 {
+        let dist = if beta == Time::MAX { tbfs_inf(tg, &succ, s) } else { tbfs(tg, &succ, s) };
+        hc[s-1] = harmonic_centrality::<Shortest>(s, dist);
+        top[s-1] = s;
+        let mut cur = s-1;
+        while cur > 0 && hc[cur-1] < hc[cur] {
+            let a = hc[cur];
+            let b = top[cur];
+            hc[cur] = hc[cur-1];
+            top[cur] = top[cur-1];
+            hc[cur-1] = a;
+            top[cur-1] = b;
+            cur -= 1;
+        } 
+    }
+    for s in k+1..tg.n {
+        hc[k] = if beta == Time::MAX { tbfs_inf_prune(tg, &succ, s, hc[k-1]) } else { tbfs_prune(tg, &succ, s, hc[k-1]) };
+        top[k] = s;
+        let mut cur = k;
+        while cur > 0 && hc[cur-1] < hc[cur] {
+            let a = hc[cur];
+            let b = top[cur];
+            hc[cur] = hc[cur-1];
+            top[cur] = top[cur-1];
+            hc[cur-1] = a;
+            top[cur-1] = b;
+            cur -= 1;
+        } 
+    }
+    top
+}
+
 use std::thread;
 use std::sync::{Arc, Mutex, mpsc};
 

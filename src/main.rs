@@ -142,6 +142,12 @@ fn main() {
             println!("{}", top_hc);
         },
 
+        "tksc" | "top-k-shortest-closeness" => {
+            let beta = if opt.beta == -1 { Time::MAX } else { Time::try_from(opt.beta).expect("unexpected beta value") };
+            let top_hc = top_k_shortest_closeness(&tg, beta, 100);
+            println!("{:?}", top_hc);
+        },
+
         _ => {
             match opt.criterion.as_str() {
                 "foremost" | "Fo" => command::<cost::Foremost>(&tg, &opt),
