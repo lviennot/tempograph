@@ -51,8 +51,9 @@ pub fn top_shortest_closeness(tg: &TGraph, beta: Time) -> f64 {
     hc_max
 }
 
-pub fn top_k_shortest_closeness(tg: &TGraph, beta: Time, k: Node) -> Vec<Node> {
+pub fn top_k_shortest_closeness(tg: &TGraph, beta: Time, mut k: Node) -> Vec<Node> {
     let succ = tg.extend_indexes(beta);
+    if k > tg.n { k = tg.n-1; }
     let mut hc = vec![0.; k+1];
     let mut top = vec![0; k+1];
     for s in 1..k+1 {
