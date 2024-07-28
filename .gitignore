@@ -2,3 +2,8 @@ Cargo.lock
 target
 _*
 .DS_Store
+graphs/
+hc/
+times/
+exec/
+logs/
