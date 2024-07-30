@@ -78,6 +78,9 @@ struct Opt {
     #[structopt(parse(from_os_str))]
     input: PathBuf,
 
+    /// Number of top nodes.
+    #[structopt(short, long, default_value = "0")]
+    kappa: usize,
 }
 
 fn main() {
@@ -144,7 +147,8 @@ fn main() {
 
         "tksc" | "top-k-shortest-closeness" => {
             let beta = if opt.beta == -1 { Time::MAX } else { Time::try_from(opt.beta).expect("unexpected beta value") };
-            let top_hc = top_k_shortest_closeness(&tg, beta, 100);
+            let kappa = if opt.kappa == 0 { 100 } else { usize::try_from(opt.kappa).expect("unexpected kappa value")};
+            let top_hc = top_k_shortest_closeness(&tg, beta, kappa);
             println!("{:?}", top_hc);
         },
 
