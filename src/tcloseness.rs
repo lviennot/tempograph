@@ -15,14 +15,14 @@ pub fn closeness<C: Cost>(tg: &TGraph, beta: Time) -> Vec<f64> {
     (0..tg.n).map(|s| -> f64 {
         tsweep.clear();
         tsweep.scan(s, beta);
-        let hc = harmonic_centrality::<C>(s, tsweep.opt_costs(s));
+        let hc = harmonic_centrality::<C>(s, &tsweep.opt_costs(s));
         pl.update();
         if s == tg.n - 1 { pl.stop() }
         hc
     }).collect()
 }
 
-fn harmonic_centrality<C: Cost>(s: Node, dist: Vec<C::TargetCost>) -> f64 {
+fn harmonic_centrality<C: Cost>(s: Node, dist: &Vec<C::TargetCost>) -> f64 {
     let mut hc = 0.;
     let infty = C::infinite_target_cost();
     for t in 0..dist.len() {
@@ -34,9 +34,10 @@ fn harmonic_centrality<C: Cost>(s: Node, dist: Vec<C::TargetCost>) -> f64 {
 pub fn shortest_closeness(tg: &TGraph, beta: Time) -> Vec<f64> {
     let succ = tg.extend_indexes(beta);
     let mut hc = vec![0.; tg.n];
+    let mut tbfs = TBFS::new(tg);
     for s in 0..tg.n {
-        let dist = if beta == Time::MAX { tbfs_inf(tg, &succ, s) } else { tbfs(tg, &succ, s) };
-        hc[s] = harmonic_centrality::<Shortest>(s, dist);
+        if beta == Time::MAX { tbfs.tbfs_inf(tg, &succ, s) } else { tbfs.tbfs(tg, &succ, s) };
+        hc[s] = harmonic_centrality::<Shortest>(s, &tbfs.u_hop);
     }
     hc
 }
@@ -44,8 +45,11 @@ pub fn shortest_closeness(tg: &TGraph, beta: Time) -> Vec<f64> {
 pub fn top_shortest_closeness(tg: &TGraph, beta: Time) -> f64 {
     let succ = tg.extend_indexes(beta);
     let mut hc_max = 0.;
+    let mut tbfs = TBFS::new(tg);
     for s in 0..tg.n {
-        let hc = if beta == Time::MAX { tbfs_inf_prune(tg, &succ, s, hc_max) } else { tbfs_prune(tg, &succ, s, hc_max) };
+        let hc = 
+            if beta == Time::MAX { tbfs.tbfs_inf_prune(tg, &succ, s, hc_max) } 
+            else { tbfs.tbfs_prune(tg, &succ, s, hc_max) };
         if hc > hc_max { hc_max = hc }
     }
     hc_max
@@ -54,10 +58,12 @@ pub fn top_shortest_closeness(tg: &TGraph, beta: Time) -> f64 {
 pub fn top_k_shortest_closeness(tg: &TGraph, beta: Time, mut k: Node) -> Vec<Node> {
     let succ = tg.extend_indexes(beta);
     if k > tg.n { k = tg.n-1; }
+    let mut tbfs = TBFS::new(tg);
     let mut hc = vec![0.; k+1];
     let mut top = vec![0; k+1];
     for s in 1..k+1 {
-        let dist = if beta == Time::MAX { tbfs_inf(tg, &succ, s) } else { tbfs(tg, &succ, s) };
+        if beta == Time::MAX { tbfs.tbfs_inf(tg, &succ, s) } else { tbfs.tbfs(tg, &succ, s) };
+        let dist = & tbfs.u_hop;
         hc[s-1] = harmonic_centrality::<Shortest>(s, dist);
         top[s-1] = s;
         let mut cur = s-1;
@@ -72,7 +78,9 @@ pub fn top_k_shortest_closeness(tg: &TGraph, beta: Time, mut k: Node) -> Vec<Nod
         } 
     }
     for s in k+1..tg.n {
-        hc[k] = if beta == Time::MAX { tbfs_inf_prune(tg, &succ, s, hc[k-1]) } else { tbfs_prune(tg, &succ, s, hc[k-1]) };
+        hc[k] = 
+            if beta == Time::MAX { tbfs.tbfs_inf_prune(tg, &succ, s, hc[k-1]) } 
+            else { tbfs.tbfs_prune(tg, &succ, s, hc[k-1]) };
         top[k] = s;
         let mut cur = k;
         while cur > 0 && hc[cur-1] < hc[cur] {
@@ -103,10 +111,13 @@ pub fn top_shortest_closeness_par(tg: &TGraph, beta: Time, nthread: u32) -> f64 
         for i_th in 0..nthread as Node {
             let hc_max_all = Arc::clone(&hc_max_all);
             s.spawn(move || {
+                let mut tbfs = TBFS::new(tg);
                 let mut hc_max = 0.;
                 for s in 0..tg.n  {
                     if s % nthread as Node == i_th {
-                        let hc_s = if beta == Time::MAX { tbfs_inf_prune(tg, succ_ref, s, hc_max) } else { tbfs_prune(tg, succ_ref, s, hc_max) };
+                        let hc_s = 
+                            if beta == Time::MAX { tbfs.tbfs_inf_prune(tg, succ_ref, s, hc_max) } 
+                            else { tbfs.tbfs_prune(tg, succ_ref, s, hc_max) };
                         if hc_s > hc_max {
                             hc_max = hc_s;
                             if hc_max > *hc_max_all.lock().unwrap() {
@@ -149,7 +160,7 @@ pub fn closeness_par<C: Cost>(tg: &TGraph, beta: Time, nthread: u32) -> Vec<f64>
                     if s % nthread as Node == i_th {
                         tsweep.clear();
                         tsweep.scan(s, beta);
-                        hc[s] = harmonic_centrality::<C>(s, tsweep.opt_costs(s))
+                        hc[s] = harmonic_centrality::<C>(s, &tsweep.opt_costs(s))
                     }
                     if i_th == 0 { plopt.as_mut().expect("no logger").update() }
                 }

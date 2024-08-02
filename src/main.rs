@@ -83,6 +83,8 @@ struct Opt {
     kappa: usize,
 }
 
+use std::io::{BufWriter, Write};
+
 fn main() {
     let opt = Opt::from_args();
 
@@ -115,44 +117,51 @@ fn main() {
     let tg = TGraph::new(tedges);
     log::info!("n={} M={}", tg.n, tg.m);
 
+    // println! is not buffered and flushes after each line, use a BufWriter:
+    let stdout = std::io::stdout();
+    let lock = stdout.lock();
+    let mut out = BufWriter::new(lock);
+    // use `writeln!(out, "{}", smthg).expect("IO goes fine")` instead of `println!("{}", smthg)`
+
     match opt.command.as_str() {
 
         "size" | "sz" => {
-            println!("{} {}", tg.n, tg.m);
+            writeln!(out, "{} {}", tg.n, tg.m).expect("IO goes fine");
         }
 
         "earr" | "p" | "print" => {
             for &i in tg.earr.iter() {
-                println!("{}", &tg.edep[i]);
+                writeln!(out, "{}", &tg.edep[i]).expect("IO goes fine");
             }
         },
 
         "edep" => {
             for e in tg.edep.iter() {
-                println!("{}", e);
+                writeln!(out, "{}", e).expect("IO goes fine");
             }
         },
 
         "sc" | "shortest-closeness" => {
             let beta = if opt.beta == -1 { Time::MAX } else { Time::try_from(opt.beta).expect("unexpected beta value") };
             let hc = shortest_closeness(&tg, beta);
-            for c in hc { println!("{}", c); }
+            for c in hc { writeln!(out, "{}", c).expect("IO goes fine"); }
         },
 
         "tsc" | "top-shortest-closeness" => {
             let beta = if opt.beta == -1 { Time::MAX } else { Time::try_from(opt.beta).expect("unexpected beta value") };
             let top_hc = if opt.nthreads == 1 { top_shortest_closeness(&tg, beta) } else { top_shortest_closeness_par(&tg, beta, opt.nthreads) };
-            println!("{}", top_hc);
+            writeln!(out, "{}", top_hc).expect("IO goes fine");
         },
 
         "tksc" | "top-k-shortest-closeness" => {
             let beta = if opt.beta == -1 { Time::MAX } else { Time::try_from(opt.beta).expect("unexpected beta value") };
             let kappa = if opt.kappa == 0 { 100 } else { usize::try_from(opt.kappa).expect("unexpected kappa value")};
             let top_hc = top_k_shortest_closeness(&tg, beta, kappa);
-            println!("{:?}", top_hc);
+            writeln!(out, "{:?}", top_hc).expect("IO goes fine");
         },
 
         _ => {
+            drop(out);
             match opt.criterion.as_str() {
                 "foremost" | "Fo" => command::<cost::Foremost>(&tg, &opt),
                 "latest" | "L" => command::<cost::Latest>(&tg, &opt),
@@ -175,6 +184,10 @@ fn main() {
 
 fn command<C: cost::Cost>(tg: &TGraph, opt: &Opt) {
 
+    let stdout = std::io::stdout();
+    let lock = stdout.lock();
+    let mut out = BufWriter::new(lock);
+
     let beta = if opt.beta == -1 { Time::MAX } else { Time::try_from(opt.beta).expect("unexpected beta value") };
     log::info!("use of beta={beta}");
  
@@ -186,13 +199,13 @@ fn command<C: cost::Cost>(tg: &TGraph, opt: &Opt) {
             tsweep.scan(opt.source, beta);
             let opt_costs = tsweep.opt_costs(opt.source);
             for c in opt_costs {
-                println!("{:?}", c);
+                writeln!(out, "{:?}", c).expect("IO goes fine");
             }
         },
 
         "c" | "closeness" => {
             let hc = if opt.nthreads == 1 { closeness::<C>(&tg, beta) } else { closeness_par::<C>(&tg, beta, opt.nthreads) };
-            for c in hc { println!("{}", c); }
+            for c in hc { writeln!(out, "{}", c).expect("IO goes fine"); }
         },
 
         _ => panic!("Unkown command '{}'.", opt.command)
