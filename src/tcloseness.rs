@@ -4,8 +4,10 @@ use crate::cost::*;
 use crate::tbfs::*;
 
 use dsi_progress_logger::*;
+use std::time::{Instant};
 
 pub fn closeness<C: Cost>(tg: &TGraph, beta: Time) -> Vec<f64> {
+    let start = Instant::now();
     let mut tsweep: TSweep<C> = TSweep::new(&tg);
     let mut pl = ProgressLogger::default();
     pl.expected_updates(Some(tg.n as usize))
@@ -17,7 +19,7 @@ pub fn closeness<C: Cost>(tg: &TGraph, beta: Time) -> Vec<f64> {
         tsweep.scan(s, beta);
         let hc = harmonic_centrality::<C>(s, &tsweep.opt_costs(s));
         pl.update();
-        if s == tg.n - 1 { pl.stop() }
+        if s == tg.n - 1 { pl.stop(); let duration = start.elapsed(); println!("Time elapsed: {:?}", duration); }
         hc
     }).collect()
 }
@@ -32,6 +34,7 @@ fn harmonic_centrality<C: Cost>(s: Node, dist: &Vec<C::TargetCost>) -> f64 {
 }
 
 pub fn shortest_closeness(tg: &TGraph, beta: Time) -> Vec<f64> {
+    let start = Instant::now();
     let succ = tg.extend_indexes(beta);
     let mut hc = vec![0.; tg.n];
     let mut tbfs = TBFS::new(tg);
@@ -39,33 +42,43 @@ pub fn shortest_closeness(tg: &TGraph, beta: Time) -> Vec<f64> {
         if beta == Time::MAX { tbfs.tbfs_inf(tg, &succ, s) } else { tbfs.tbfs(tg, &succ, s) };
         hc[s] = harmonic_centrality::<Shortest>(s, &tbfs.u_hop);
     }
+    let duration = start.elapsed(); println!("Time elapsed: {:?}", duration);
     hc
 }
 
 pub fn top_shortest_closeness(tg: &TGraph, beta: Time) -> f64 {
+    let mut deg_ord: Vec<Node> = (0..tg.n).collect();
+    deg_ord.sort_by(|a, b| (tg.u_fst[b+1]-tg.u_fst[*b]).cmp(&(tg.u_fst[a+1]-tg.u_fst[*a])));
+    let start = Instant::now();
     let succ = tg.extend_indexes(beta);
     let mut hc_max = 0.;
     let mut tbfs = TBFS::new(tg);
     for s in 0..tg.n {
+        let ss = deg_ord[s];
         let hc = 
-            if beta == Time::MAX { tbfs.tbfs_inf_prune(tg, &succ, s, hc_max) } 
-            else { tbfs.tbfs_prune(tg, &succ, s, hc_max) };
+            if beta == Time::MAX { tbfs.tbfs_inf_prune(tg, &succ, ss, hc_max) } 
+            else { tbfs.tbfs_prune(tg, &succ, ss, hc_max) };
         if hc > hc_max { hc_max = hc }
     }
+    let duration = start.elapsed(); println!("Time elapsed: {:?}", duration);
     hc_max
 }
 
 pub fn top_k_shortest_closeness(tg: &TGraph, beta: Time, mut k: Node) -> Vec<Node> {
+    let mut deg_ord: Vec<Node> = (0..tg.n).collect();
+    deg_ord.sort_by(|a, b| (tg.u_fst[b+1]-tg.u_fst[*b]).cmp(&(tg.u_fst[a+1]-tg.u_fst[*a])));
+    let start = Instant::now();
     let succ = tg.extend_indexes(beta);
     if k > tg.n { k = tg.n-1; }
     let mut tbfs = TBFS::new(tg);
     let mut hc = vec![0.; k+1];
     let mut top = vec![0; k+1];
     for s in 1..k+1 {
-        if beta == Time::MAX { tbfs.tbfs_inf(tg, &succ, s) } else { tbfs.tbfs(tg, &succ, s) };
+        let ss = deg_ord[s];
+        if beta == Time::MAX { tbfs.tbfs_inf(tg, &succ, ss) } else { tbfs.tbfs(tg, &succ, ss) };
         let dist = & tbfs.u_hop;
-        hc[s-1] = harmonic_centrality::<Shortest>(s, dist);
-        top[s-1] = s;
+        hc[s-1] = harmonic_centrality::<Shortest>(ss, dist);
+        top[s-1] = ss;
         let mut cur = s-1;
         while cur > 0 && hc[cur-1] < hc[cur] {
             let a = hc[cur];
@@ -78,10 +91,11 @@ pub fn top_k_shortest_closeness(tg: &TGraph, beta: Time, mut k: Node) -> Vec<Nod
         } 
     }
     for s in k+1..tg.n {
+        let ss = deg_ord[s];
         hc[k] = 
-            if beta == Time::MAX { tbfs.tbfs_inf_prune(tg, &succ, s, hc[k-1]) } 
-            else { tbfs.tbfs_prune(tg, &succ, s, hc[k-1]) };
-        top[k] = s;
+            if beta == Time::MAX { tbfs.tbfs_inf_prune(tg, &succ, ss, hc[k-1]) } 
+            else { tbfs.tbfs_prune(tg, &succ, ss, hc[k-1]) };
+        top[k] = ss;
         let mut cur = k;
         while cur > 0 && hc[cur-1] < hc[cur] {
             let a = hc[cur];
@@ -93,6 +107,7 @@ pub fn top_k_shortest_closeness(tg: &TGraph, beta: Time, mut k: Node) -> Vec<Nod
             cur -= 1;
         } 
     }
+    let duration = start.elapsed(); println!("Time elapsed: {:?}", duration);
     top
 }
 
