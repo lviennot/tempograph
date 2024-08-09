@@ -35,7 +35,7 @@ struct Opt {
     /// `soc` or `src-opt-cost` for single-source optimal temporal walks:
     ///    compute optimal walks from a source `s` (set with `-source`)
     ///    and output for each node `t` the cost (see `-criterion`) of
-    ///    an optimal st-walk.
+    ///    an optimal `st`-walk.
     /// `c` or `closeness` for harmonic closeness of all nodes:
     ///    the harmonic closeness of `s` is `\sum_{t != s} 1 / dist(s,t)`
     ///    where `dist(s,t)` is the length in number of temporal edges
@@ -45,6 +45,9 @@ struct Opt {
     ///    where `nwalks(s,t)` is the number of optimal walks from `s` to `t`
     ///    and `nwalks(s,v,t)` is the number of optimal walks from `s` to `t` passing
     ///    through `v` (the multiplicity of `v` in an optimal walk is counted).
+    /// `rc` | `reachability` for reachability:
+    ///    the reachability of `s` is the number of nodes `t` such that there exists 
+    ///    an `st`-walk.
     /// `p` or `print` for temporal edges (sorted by arrival time).
     #[structopt(short, long, default_value = "print", verbatim_doc_comment)]
     command: String,
@@ -151,6 +154,12 @@ fn main() {
             for e in tg.edep.iter() {
                 writeln!(out, "{}", e).expect("IO goes fine");
             }
+        },
+
+        "rc" | "reachability" => {
+            let beta = if opt.beta == -1 { Time::MAX } else { Time::try_from(opt.beta).expect("unexpected beta value") };
+            let rc = reachability_par(&tg, beta, opt.nthreads);
+            for r in rc { writeln!(out, "{}", r).expect("IO goes fine"); }
         },
 
         "sc" | "shortest-closeness" => {

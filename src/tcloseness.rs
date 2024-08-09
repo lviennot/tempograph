@@ -4,7 +4,7 @@ use crate::cost::*;
 use crate::tbfs::*;
 
 use dsi_progress_logger::*;
-use std::time::{Instant};
+use std::time::Instant;
 
 pub fn closeness<C: Cost>(tg: &TGraph, beta: Time) -> Vec<f64> {
     let start = Instant::now();
@@ -192,4 +192,48 @@ pub fn closeness_par<C: Cost>(tg: &TGraph, beta: Time, nthread: u32) -> Vec<f64>
         }
     }
     hc
+}
+
+pub fn reachability_par(tg: &TGraph, beta: Time, nthread: u32) -> Vec<Node> {
+    let n_th_dft = std::thread::available_parallelism()
+        .unwrap_or(std::num::NonZeroUsize::new(2).unwrap()).get() as u32;
+    let nthread = if nthread > 0 { nthread } else { n_th_dft };
+    log::info!("Using {nthread} threads.");
+    let succ = tg.extend_indexes(beta);
+    let rsucc = &succ;
+    let (tx, rx) = mpsc::channel();
+    thread::scope(|s| {
+        for i_th in 0..nthread as Node {
+            let tx = tx.clone();
+            //let tg = tg.clone();
+            s.spawn(move || {
+                let mut plopt = None;
+                if i_th == 0 {
+                    let mut pl = ProgressLogger::default();
+                    pl.expected_updates(Some(tg.n as usize));
+                    pl.display_memory(true);
+                    pl.item_name("node");
+                    pl.start("Computing reachability...");
+                    plopt = Some(pl);
+                }
+                let mut rch = vec![0 as Node; tg.n];
+                let mut tbfs = TBFS::new(tg);
+                for s in 0..tg.n {
+                    if beta == Time::MAX { tbfs.tbfs_inf(tg, rsucc, s) } else { tbfs.tbfs(tg, rsucc, s) };
+                    rch[s] = tbfs.u_hop.iter().filter(|&&h| h < Hop::MAX).count();
+                    if i_th == 0 { plopt.as_mut().expect("no logger").update() }
+                }
+                if i_th == 0 { plopt.unwrap().stop() }
+                tx.send(rch).unwrap();
+            });
+        }
+    });
+    let mut rch = vec![0 as Node; tg.n];
+    for _ in 0..nthread {
+        let r_th = rx.recv().unwrap();
+        for v in 0..tg.n as usize {
+            if r_th[v] > 0 { rch[v] = r_th[v]; }
+        }
+    }
+    rch
 }
