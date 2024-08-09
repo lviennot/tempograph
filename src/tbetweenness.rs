@@ -84,25 +84,29 @@ impl RatFrom<Integer> for Rational {
     }
 }
 
+impl RatFrom<f64> for f64 {
+    fn rat_from(i: f64) -> f64 { i }
+}
 
-//type NumExact = NumT<Integer, Rational, True>;
-//type NumU128F64 = NumT<u128, f64, False>;
+
+
+pub type NumExact = NumT<Integer, Rational, True, True>;
+pub type NumApprox = NumT<f64, f64, False, False>;
 
 
 /// All information required to perform a sweep (i.e. a traversal) of a temporal graph.
 pub struct TGraphSweep<'tg, C : Cost, N : Num> {
     tg: &'tg TGraph,
-    e_inf: Vec<TEdgeInfo<C, N>>, // aligned with earr
-    e_succ: Vec<TEdgeSucc>, // aligned with earr
-    e_betw: Vec<N::Rat>, // aligned with earr
-    u_inf: Vec<NodeInfo<C, N>>,
+    e_inf: Vec<TEdgeInfo<C, N>>, // edge info, aligned with edep
+    e_succ: Vec<TEdgeSucc>, // edge successors, aligned with edep
+    e_betw: Vec<N::Rat>, // edge betweenness, aligned with edep
+    u_inf: Vec<NodeInfo<C, N>>, // node info
 }
 
 
 
 #[derive(Clone, Debug)]
 struct TEdgeInfo<C : Cost, N : Num> { // info about a tedge e={u,v,t,d}
-    idep: Eind, // index in edep
     min_cost: C, // minimum cost of a walk ending with e
     walks: N::Int, // number of minimum cost walks ending with e
 }
@@ -142,18 +146,14 @@ use core::cmp::{min, max};
 impl<'tg, C : Cost, N : Num> TGraphSweep<'tg, C, N>{
 
     pub fn new(tg: &'tg TGraph) -> TGraphSweep<'tg, C, N> {
-        assert!(u128::try_from(tg.m).unwrap() <= <u32 as Into<u128>>::into(Eind::MAX));
+        assert!(usize::try_from(tg.m).unwrap() <= usize::try_from(Eind::MAX).unwrap());
 
         let mut e_inf: Vec<TEdgeInfo<C, N>> = Vec::with_capacity(tg.m as usize);
         for _ in 0..tg.m {
             e_inf.push(TEdgeInfo {
-                idep: 0,
                 min_cost: Cost::infinite_cost(),
                 walks: N::i_zero(), 
             });
-        }
-        for (i, &j) in tg.edep.iter().enumerate() {
-            e_inf[j as usize].idep = i as Eind;
         }
 
         let mut e_succ: Vec<TEdgeSucc> = Vec::with_capacity(tg.m as usize);
@@ -166,14 +166,14 @@ impl<'tg, C : Cost, N : Num> TGraphSweep<'tg, C, N>{
 
         let e_betw = vec![N::r_zero(); tg.m as usize];
 
-        let mut u_inf: Vec<NodeInfo<C, N>> = Vec::with_capacity(tg.n as usize + 1);
+        let mut u_inf: Vec<NodeInfo<C, N>> = Vec::with_capacity(tg.n as usize);
 
         // in-degrees:
         let mut in_deg: Vec<usize> = vec![0; (tg.n+1) as usize];
-        for e in &tg.earr {
+        for e in &tg.edep {
             in_deg[e.v as usize] += 1;
         }
-        for u in 0..=tg.n as usize {
+        for u in 0..tg.n as usize {
             u_inf.push(NodeInfo { 
                 intervs: VecDeque::with_capacity(in_deg[u]/64), // max size is in_deg[v], but try to be smaller than tg
                 preds: VecDeque::with_capacity(in_deg[u]/64),
@@ -217,8 +217,9 @@ impl<'tg, C : Cost, N : Num> TGraphSweep<'tg, C, N>{
 
    pub fn forward(&mut self, s: Node, beta: Time) {
         let infty = Cost::infinite_cost();
-        for (i, e) in self.tg.earr.iter().enumerate() {
-            self.finalize(e.u, self.e_inf[i].idep+1);
+        for &i in &self.tg.earr {
+            let e = &self.tg.edep[i];
+            self.finalize(e.u, i+1);
             let ei = &self.e_inf[i];
             if e.u == s || ei.min_cost < infty {
 
@@ -236,8 +237,7 @@ impl<'tg, C : Cost, N : Num> TGraphSweep<'tg, C, N>{
 
                 let mut l_ei = self.u_inf[e.v as usize].l;
                 let arr = e.arr();
-                while l_ei < self.tg.u_fst[e.v as usize + 1] 
-                    && self.tg.earr[self.tg.edep[l_ei as usize] as usize].t < arr { l_ei += 1; }
+                while l_ei < self.tg.u_fst[e.v as usize + 1] && self.tg.edep[l_ei as usize].t < arr { l_ei += 1; }
 
                 self.finalize(e.v, l_ei);
                 let ei =  &self.e_inf[i];
@@ -247,8 +247,7 @@ impl<'tg, C : Cost, N : Num> TGraphSweep<'tg, C, N>{
                 let vi = &mut self.u_inf[e.v as usize];
                 let mut l = vi.r;
                 let mut r_ei = vi.r;
-                while r_ei < self.tg.u_fst[e.v as usize + 1] 
-                    && self.tg.earr[self.tg.edep[r_ei as usize] as usize].t - arr <= beta { r_ei += 1; }
+                while r_ei < self.tg.u_fst[e.v as usize + 1] && self.tg.edep[r_ei as usize].t - arr <= beta { r_ei += 1; }
 
                 while let Some(itv) = vi.intervs.back_mut() {
                     if itv.cost > ei.min_cost {
@@ -313,9 +312,9 @@ impl<'tg, C : Cost, N : Num> TGraphSweep<'tg, C, N>{
                     if ri <= r_end {
                         //let iwalks = fin_edges(itv.walks.clone(), 
                         //                                itv.l as usize, ri as usize, i as usize);
-                        for &j in &self.tg.edep[itv.l as usize .. ri as usize] {
-                            self.e_inf[j as usize].min_cost = c.clone() + C::edge_cost(&self.tg.earr[j as usize]);
-                            self.e_inf[j as usize].walks = itv.walks.clone();
+                        for j in itv.l as usize .. ri as usize {
+                            self.e_inf[j].min_cost = c.clone() + C::edge_cost(&self.tg.edep[j]);
+                            self.e_inf[j].walks = itv.walks.clone();
                         }
                         //itv.walks -= iwalks;
                         vi.preds.pop_front();
@@ -342,9 +341,9 @@ impl<'tg, C : Cost, N : Num> TGraphSweep<'tg, C, N>{
                 } else {
                     let mut fin_edges = 
                 |walks: N::Int, l: usize, r: usize, i: usize| -> N::Int {
-                    for &j in &self.tg.edep[l..r] {
-                        self.e_inf[j as usize].min_cost = c.clone() + C::edge_cost(&self.tg.earr[j as usize]);
-                        self.e_inf[j as usize].walks = walks.clone();
+                    for j in l as usize .. r as usize {
+                        self.e_inf[j].min_cost = c.clone() + C::edge_cost(&self.tg.edep[j]);
+                        self.e_inf[j].walks = walks.clone();
                     }
                     self.e_inf[i].walks.clone() // to avoid double borrow
                 };
@@ -368,7 +367,7 @@ impl<'tg, C : Cost, N : Num> TGraphSweep<'tg, C, N>{
 
     fn count_opt_cost_walks(&mut self, s: Node) -> () {
         self.u_inf[s as usize].opt_cost = C::empty_target_cost();
-        for (i, e) in self.tg.earr.iter().enumerate() {
+        for (i, e) in self.tg.edep.iter().enumerate() {
             if self.e_inf[i].min_cost < Cost::infinite_cost() {
                 let c = C::target_cost(&self.e_inf[i].min_cost, e);
                 if c < self.u_inf[e.v as usize].opt_cost {
@@ -377,7 +376,7 @@ impl<'tg, C : Cost, N : Num> TGraphSweep<'tg, C, N>{
             }
         }
         self.u_inf[s as usize].opt_walks = N::i_one(); // empty walk
-        for (i, e) in self.tg.earr.iter().enumerate() {
+        for (i, e) in self.tg.edep.iter().enumerate() {
             if self.e_inf[i].min_cost < Cost::infinite_cost() {
                 let c = C::target_cost(&self.e_inf[i].min_cost, e);
                 if c == self.u_inf[e.v as usize].opt_cost {
@@ -388,7 +387,7 @@ impl<'tg, C : Cost, N : Num> TGraphSweep<'tg, C, N>{
     }
 
     pub fn backward(&mut self, s: Node) -> u64 {
-        for v in 0..=self.tg.n as usize {
+        for v in 0..self.tg.n as usize {
             assert_eq!(self.u_inf[v].l, self.tg.u_fst[v+1]);
             assert_eq!(self.u_inf[v].r, self.tg.u_fst[v+1]);
             assert_eq!(self.u_inf[v].refresh, self.tg.u_fst[v+1]);
@@ -402,10 +401,10 @@ impl<'tg, C : Cost, N : Num> TGraphSweep<'tg, C, N>{
 
         // compute edges_betweenness:
         let mut _outdeg_sum: u64 = 0;
-        for (i, e) in self.tg.earr.iter().rev().enumerate() {
-            let i = self.tg.m as usize - 1 - i; // rev
-            let e_l = self.e_succ[i].left;
-            let e_r = self.e_succ[i].right;
+        for &i in self.tg.earr.iter().rev() {
+            let e = &self.tg.edep[i];
+            let e_l = self.e_succ[i as usize].left;
+            let e_r = self.e_succ[i as usize].right;
             if e_l < e_r {
                 _outdeg_sum += (e_r - e_l) as u64;
                 // update vi.betw so that it stores sum_{j in edep[e_l..e_r]} ej.betw / ej.walks
@@ -417,10 +416,9 @@ impl<'tg, C : Cost, N : Num> TGraphSweep<'tg, C, N>{
                         vi.r = e_r; // empty interval
                         vi.betw = N::r_zero();
                     }
-                    for i_j in (max(e_r,vi.l) as usize .. vi.r as usize).rev() {
-                        let j = self.tg.edep[i_j];
-                        let f = &self.tg.earr[j as usize];
-                        let ej = &self.e_inf[j as usize];
+                    for j in (max(e_r,vi.l) as usize .. vi.r as usize).rev() {
+                        let f = &self.tg.edep[j];
+                        let ej = &self.e_inf[j];
                         if e.v != s || ei.min_cost.clone() + C::edge_cost(f) == ej.min_cost {
                             vi.betw -= self.e_betw[j as usize].clone() / r_walks[j as usize].clone(); //N::real_of_int(ej.walks); 
                         }
@@ -430,12 +428,11 @@ impl<'tg, C : Cost, N : Num> TGraphSweep<'tg, C, N>{
                         vi.l = e_r; // empty interval
                         vi.betw = N::r_zero(); 
                     }
-                    for i_j in (e_l as usize .. min(e_r, vi.l) as usize).rev() {
-                        let j = self.tg.edep[i_j];
-                        let f = &self.tg.earr[j as usize];
-                        let ej = &self.e_inf[j as usize];
+                    for j in (e_l as usize .. min(e_r, vi.l) as usize).rev() {
+                        let f = &self.tg.edep[j];
+                        let ej = &self.e_inf[j];
                         if e.v != s || ei.min_cost.clone() + C::edge_cost(f) == ej.min_cost {
-                            vi.betw += self.e_betw[j as usize].clone() / r_walks[j as usize].clone(); //N::real_of_int(ej.walks); 
+                            vi.betw += self.e_betw[j].clone() / r_walks[j].clone(); //N::real_of_int(ej.walks); 
                         }
                     }
                     vi.l = e_l;
@@ -478,7 +475,7 @@ impl<'tg, C : Cost, N : Num> TGraphSweep<'tg, C, N>{
         for vi in &mut self.u_inf { 
             vi.betw = N::r_zero();
         }
-        for (i, e) in self.tg.earr.iter().enumerate() {
+        for (i, e) in self.tg.edep.iter().enumerate() {
             if e.v != s {  // do not count optimal walks to the source
                 self.u_inf[e.v as usize].betw += self.e_betw[i].clone()
             }
@@ -499,13 +496,13 @@ impl<'tg, C : Cost, N : Num> TGraphSweep<'tg, C, N>{
         pl.display_memory(true);
         pl.item_name("node");
         pl.start("Computing betweenness...");
-        let mut betw: Vec<N::Rat> = vec![N::r_zero(); self.tg.n as usize + 1];
+        let mut betw: Vec<N::Rat> = vec![N::r_zero(); self.tg.n as usize];
         let mut _outdeg_sum: u128 = 0;
-        for s in 0..=self.tg.n as Node {
+        for s in 0..self.tg.n as Node {
             self.clear();
             self.forward(s, beta);
             _outdeg_sum += self.backward(s) as u128;
-            for v in 0..=self.tg.n as usize {
+            for v in 0..self.tg.n as usize {
                 betw[v] += self.u_inf[v].betw.clone();
             }
             pl.update();
@@ -527,20 +524,20 @@ impl<'tg, C : Cost, N : Num> TGraphSweep<'tg, C, N>{
     
     pub fn target_costs(&self) -> Vec<C::TargetCost> {
         (0..self.tg.m as usize).map(|i| 
-            Cost::target_cost(&self.e_inf[i].min_cost, &self.tg.earr[i])
+            Cost::target_cost(&self.e_inf[i].min_cost, &self.tg.edep[i])
         ).collect()
     }
     
     pub fn opt_costs(&mut self) -> Vec<C::TargetCost> {
-        (0..=self.tg.n as usize).map(|v| self.u_inf[v].opt_cost.clone()).collect()
+        (0..self.tg.n as usize).map(|v| self.u_inf[v].opt_cost.clone()).collect()
     }
 
     pub fn opt_walk_counts(&mut self) -> Vec<N::Int> {
-        (0..=self.tg.n as usize).map(|v| self.u_inf[v].opt_walks.clone()).collect()
+        (0..self.tg.n as usize).map(|v| self.u_inf[v].opt_walks.clone()).collect()
     }
 
     pub fn nodes_betweenness(&mut self) -> Vec<N::Rat> {
-        (0..=self.tg.n as usize).map(|v| self.u_inf[v].betw.clone()).collect()
+        (0..self.tg.n as usize).map(|v| self.u_inf[v].betw.clone()).collect()
     }
 
     pub fn edges_betweenness(&mut self) -> Vec<N::Rat> {
@@ -556,7 +553,7 @@ pub fn betweenness_seq<C : Cost, N : Num>(tg: &TGraph, beta: Time) -> Vec<N::Rat
 
 pub fn betweenness_par<C : Cost, N : Num>(tg: &TGraph, beta: Time, nthread: u32) -> Vec<N::Rat> {
     let n_th = std::thread::available_parallelism()
-        .unwrap_or(std::num::NonZeroUsize::new(2).unwrap()).get() as Node;
+        .unwrap_or(std::num::NonZeroUsize::new(2).unwrap()).get() as u32;
     let n_th = if n_th > 2 { n_th - 1 } else { n_th };
     let n_th = if nthread > 0 { nthread } else { n_th };
     info!("Using {n_th} threads.");
@@ -576,13 +573,13 @@ pub fn betweenness_par<C : Cost, N : Num>(tg: &TGraph, beta: Time, nthread: u32)
                     plopt = Some(pl);
                 }
                 let mut sweep: TGraphSweep<'_, C, N> = TGraphSweep::new(tg);
-                let mut betw: Vec<N::Rat> = vec![N::r_zero(); tg.n as usize + 1];
-                for s in 0..=tg.n  {
+                let mut betw: Vec<N::Rat> = vec![N::r_zero(); tg.n as usize];
+                for s in 0..tg.n  {
                     if s % n_th as Node == i_th {
                         sweep.clear();
                         sweep.forward(s, beta);
                         sweep.backward(s);
-                        for v in 0..=tg.n as usize {
+                        for v in 0..tg.n as usize {
                             betw[v] += sweep.u_inf[v].betw.clone();
                         }
                     }
@@ -593,10 +590,10 @@ pub fn betweenness_par<C : Cost, N : Num>(tg: &TGraph, beta: Time, nthread: u32)
             });
         }
     });
-    let mut betw: Vec<N::Rat> = vec![N::r_zero(); tg.n as usize + 1];
+    let mut betw: Vec<N::Rat> = vec![N::r_zero(); tg.n as usize];
     for _ in 0..n_th {
         let b = rx.recv().unwrap();
-        for v in 0..=tg.n as usize {
+        for v in 0..tg.n as usize {
             betw[v] += b[v].clone();
         }
     }
@@ -607,14 +604,11 @@ pub fn betweenness_par<C : Cost, N : Num>(tg: &TGraph, beta: Time, nthread: u32)
 
 #[cfg(test)]
 pub mod tests_tbet {
-    use num_bigint::BigUint;
-    use num_rational::Ratio;
-
-    type NumExact = NumT<BigUint, Ratio<BigUint>, True, True>;
-    type NumU128F64 = NumT<u128, f64, True, False>;
 
     use super::*;
     use crate::cost;
+
+    type NumU128F64 = NumT<u128, f64, True, False>;
 
     #[test]
     fn test_sweep() {
@@ -622,7 +616,7 @@ pub mod tests_tbet {
             let tg: TGraph = tg_str.parse().unwrap();
             for e in tg.earr.iter() { println!("{:?}", e) }
             print!("{}", tg_str);
-            for e in tg.edep.iter().map(|&i| &tg.earr[i as usize]) { println!("{:?}", e) }
+            for e in tg.edep.iter(){ println!("{:?}", e) }
             for beta in [0, 1, 2, 100] {
                 println!("--- beta = {beta} ---");
                 let mut sweep: TGraphSweep<cost::Shortest, NumU128F64> = TGraphSweep::new(&tg);
@@ -640,9 +634,10 @@ pub mod tests_tbet {
 
     #[test]
     fn examples() {
-        let tg = tests::LZO.parse().unwrap();
-        let big= |i: &u32| -> BigUint { (*i).into() };
-        let br = |v : Vec<u32>| -> Vec<Ratio<BigUint>> {
+        let tg: TGraph = tests::LZO.parse().unwrap();
+        println!("n={}", tg.n);
+        let big= |i: &u32| -> rug::Integer { (*i).into() };
+        let br = |v : Vec<u32>| -> Vec<rug::Rational> {
             v.iter().map(|i| big(i).into()).collect()
         };
 
@@ -657,8 +652,8 @@ pub mod tests_tbet {
         assert_eq!(betweenness_seq::<cost::Foremost, NumExact>(&tg, 100), br(Vec::from([0, 0, 3, 6, 0, 3, 0])));
 
         let tg = tests::ZERO.parse().unwrap();
-        let br = |v : Vec<(u32, u32)>| -> Vec<Ratio<BigUint>> {
-            v.iter().map(|(p,q)| Into::<Ratio<BigUint>>::into(big(p)) / big(q)).collect()
+        let br = |v : Vec<(u32, u32)>| -> Vec<rug::Rational> {
+            v.iter().map(|(p,q)| Into::<rug::Rational>::into(big(p)) / big(q)).collect()
         };
 
         assert_eq!(betweenness_seq::<cost::Shortest, NumExact>(&tg, 0), br(Vec::from([(0,1), (0,1), (1,1), (1,1), (5,1), (3,1), (2,1)])));
@@ -669,7 +664,7 @@ pub mod tests_tbet {
             let tg: TGraph = tg_str.parse().unwrap();
             for e in tg.earr.iter() { println!("{:?}", e) }
             print!("{}", tg_str);
-            for e in tg.edep.iter().map(|&i| &tg.earr[i as usize]) { println!("{:?}", e) }
+            for e in tg.edep.iter() { println!("{:?}", e) }
             for beta in [0, 1, 2, 100] {
                 assert_eq!(betweenness_seq::<cost::Shortest, NumExact>(&tg, beta), 
                            betweenness_par::<cost::Shortest, NumExact>(&tg, beta, 3));

@@ -4,12 +4,15 @@ pub mod graph;
 pub mod tgraph;
 pub mod cost;
 pub mod tsweep;
-pub mod tcloseness;
+pub mod tbetweenness;
 pub mod tbfs;
+pub mod tcloseness;
 
 use tcloseness::*;
 use tgraph::*;
 use tsweep::TSweep;
+use tbfs::TBFS;
+use tbetweenness::*;
 
 use std::fs::File;
 use std::io::{BufRead, BufReader}; // use std::io::{self, prelude::*, BufReader};
@@ -29,14 +32,19 @@ struct Opt {
     verbose: bool,
 
     /// Computation to perform:
-    /// `soc` or `src-opt-cost` for single source optimum cost temporal walks:
-    ///    compute optimum-cost walks from a source `s` (set with `-source`)
+    /// `soc` or `src-opt-cost` for single-source optimal temporal walks:
+    ///    compute optimal walks from a source `s` (set with `-source`)
     ///    and output for each node `t` the cost (see `-criterion`) of
-    ///    an optimum-cost st-walk.
-    ///  `c` or `closeness` for harmonic closeness of all nodes:
+    ///    an optimal st-walk.
+    /// `c` or `closeness` for harmonic closeness of all nodes:
     ///    the harmonic closeness of `s` is `\sum_{t != s} 1 / dist(s,t)`
     ///    where `dist(s,t)` is the length in number of temporal edges
     ///    of a shortest walk from `s` to `t` (shortest criterion).
+    /// `b` or `betweenness` for betweenness of all nodes:
+    ///    the betweenness of `v` is `\sum_{s,t != v} nwalks(s,v,t) / nwalks(s,t)`
+    ///    where `nwalks(s,t)` is the number of optimal walks from `s` to `t`
+    ///    and `nwalks(s,v,t)` is the number of optimal walks from `s` to `t` passing
+    ///    through `v` (the multiplicity of `v` in an optimal walk is counted).
     /// `p` or `print` for temporal edges (sorted by arrival time).
     #[structopt(short, long, default_value = "print", verbatim_doc_comment)]
     command: String,
@@ -46,11 +54,11 @@ struct Opt {
     /// `Fo` for foremost (with earliest arrival time),
     /// `L` for latest departure time,
     /// `Fa` for fastest (minimum time difference between arrival and departure),
-    /// `W` for minimum waiting time,
+    /// `W` for minimum (overall) waiting time,
     /// `DS` for minimum sum of delays,  
     /// `SFo`, `SL`, `SFa`, `SW`, `SDS` for shortest foremost (shortest walks among 
-    /// foremost ones), shortest latest, shortest fastest, shortest with minimum waiting,
-    /// shortest with minimum sum of delays.
+    /// foremost ones), shortest latest, shortest fastest, shortest with minimum 
+    /// waiting time, shortest with minimum sum of delays.
     #[structopt(short = "C", long, default_value = "S", verbatim_doc_comment)]
     criterion: String,
 
@@ -81,6 +89,10 @@ struct Opt {
     /// Number of top nodes.
     #[structopt(short, long, default_value = "0")]
     kappa: usize,
+
+    /// Exact computation for betweenness with big rationals (otherwise approximate with floats).
+    #[structopt(short, long)]
+    exact: bool, 
 }
 
 use std::io::{BufWriter, Write};
@@ -160,6 +172,11 @@ fn main() {
             writeln!(out, "{:?}", top_hc).expect("IO goes fine");
         },
 
+        "test-clear" => {
+            let mut tbfs = TBFS::new(&tg);
+            for _ in 0..tg.n { tbfs.clear(); }
+        }
+
         _ => {
             drop(out);
             match opt.criterion.as_str() {
@@ -207,6 +224,16 @@ fn command<C: cost::Cost>(tg: &TGraph, opt: &Opt) {
             let hc = if opt.nthreads == 1 { closeness::<C>(&tg, beta) } else { closeness_par::<C>(&tg, beta, opt.nthreads) };
             for c in hc { writeln!(out, "{}", c).expect("IO goes fine"); }
         },
+
+        "b" | "betweenness" => {
+            if opt.exact {
+                let bc = if opt.nthreads == 1 { betweenness_seq::<C, NumExact>(&tg, beta) } else { betweenness_par::<C, NumExact>(&tg, beta, opt.nthreads) };
+                for c in bc { writeln!(out, "{}", c).expect("IO goes fine"); }
+            } else {
+                let bc = if opt.nthreads == 1 { betweenness_seq::<C, NumApprox>(&tg, beta) } else { betweenness_par::<C, NumApprox>(&tg, beta, opt.nthreads) };
+                for c in bc { writeln!(out, "{}", c).expect("IO goes fine"); }
+            }
+        }
 
         _ => panic!("Unkown command '{}'.", opt.command)
     }

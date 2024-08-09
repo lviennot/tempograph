@@ -15,6 +15,7 @@ pub struct TBFS {
     right: Vec<Eind>,// for each a pointer to a right_index
 }
 
+
 impl TBFS {
 
     pub fn new(tg: &TGraph) -> Self {
@@ -29,13 +30,13 @@ impl TBFS {
     }
 
     pub fn clear(&mut self) {
-        for h in self.hop.iter_mut() { *h = Hop::MAX; }
-        for t in self.u_eat.iter_mut() { *t = Time::MAX; }
-        for h in self.u_hop.iter_mut() { *h = Hop::MAX; }
-        for i in self.u_left.iter_mut() { *i = Eind::MAX; }
+        self.hop.fill(Hop::MAX);
+        self.u_eat.fill(Time::MAX);
+        self.u_hop.fill(Hop::MAX);
+        self.u_left.fill(Eind::MAX);
         self.queue.clear();
         self.right_index.clear();
-        for r in self.right.iter_mut() { *r = Eind::MAX; }
+        self.right.fill(Eind::MAX);
     }
 
     fn check_size(&self, tg: &TGraph) {
