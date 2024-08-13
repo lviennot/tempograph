@@ -48,16 +48,15 @@ pub fn shortest_closeness(tg: &TGraph, beta: Time) -> Vec<f64> {
 
 pub fn top_shortest_closeness(tg: &TGraph, beta: Time) -> f64 {
     let mut deg_ord: Vec<Node> = (0..tg.n).collect();
-    deg_ord.sort_by(|a, b| (tg.u_fst[b+1]-tg.u_fst[*b]).cmp(&(tg.u_fst[a+1]-tg.u_fst[*a])));
+    deg_ord.sort_by(|&a, &b| (tg.u_fst[b+1]-tg.u_fst[b]).cmp(&(tg.u_fst[a+1]-tg.u_fst[a])));
     let start = Instant::now();
     let succ = tg.extend_indexes(beta);
     let mut hc_max = 0.;
     let mut tbfs = TBFS::new(tg);
-    for s in 0..tg.n {
-        let ss = deg_ord[s];
+    for &s in &deg_ord {
         let hc = 
-            if beta == Time::MAX { tbfs.tbfs_inf_prune(tg, &succ, ss, hc_max) } 
-            else { tbfs.tbfs_prune(tg, &succ, ss, hc_max) };
+            if beta == Time::MAX { tbfs.tbfs_inf_prune(tg, &succ, s, hc_max) } 
+            else { tbfs.tbfs_prune(tg, &succ, s, hc_max) };
         if hc > hc_max { hc_max = hc }
     }
     let duration = start.elapsed(); println!("Time elapsed: {:?}", duration);

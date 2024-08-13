@@ -36,10 +36,17 @@ struct Opt {
     ///    compute optimal walks from a source `s` (set with `-source`)
     ///    and output for each node `t` the cost (see `-criterion`) of
     ///    an optimal `st`-walk.
-    /// `c` or `closeness` for harmonic closeness of all nodes:
+    /// `sc` or `shortest-closeness` for harmonic closeness of all nodes:
     ///    the harmonic closeness of `s` is `\sum_{t != s} 1 / dist(s,t)`
     ///    where `dist(s,t)` is the length in number of temporal edges
     ///    of a shortest walk from `s` to `t` (shortest criterion).
+    /// `tksc` or `top-k-shortest-closeness` for top-k harmonic closseness:
+    ///    same as `shortest-closeness`, but compute only the top `kappa` values
+    ///    (see `--kappa`).
+    /// `c` or `closeness` for generalized harmonic closeness of all nodes:
+    ///    the harmonic closeness of `s` is `\sum_{t != s} 1 / dist_C(s,t)`
+    ///    where `dist_C(s,t)` is the length of an optimal walk from `s` to `t` 
+    ///    for criterion `C` used for optimality (see `-C`).
     /// `b` or `betweenness` for betweenness of all nodes:
     ///    the betweenness of `v` is `\sum_{s,t != v} nwalks(s,v,t) / nwalks(s,t)`
     ///    where `nwalks(s,t)` is the number of optimal walks from `s` to `t`
@@ -66,8 +73,8 @@ struct Opt {
     criterion: String,
 
     /// Maximum waiting time: a temporal walk is restless if the maximum time between 
-    /// the arrival time of an edge and the departure time of the next is bounded by
-    /// a value `beta`, non-restless is indicated by value `-1`.
+    /// the arrival time of an edge and the departure time of the next edge in the walk
+    /// is bounded by a value `beta`, non-restless is indicated by value `-1`.
     #[structopt(short, long, default_value = "-1")]
     beta: i64,
 
@@ -82,15 +89,14 @@ struct Opt {
     nthreads: u32,
 
     /// Input file: a temporal graph in the following format:
-    /// an optional first line with node maximum number `n` 
-    /// (nodes are numbered from `0` to `n`), followed by a quadruple
-    /// `u v t delay` of unsigned integers per line for each temporal edge from node `u` 
-    /// to node `v` at time `t` with travel time `delay`.
-    #[structopt(parse(from_os_str))]
+    /// an optional first line with node maximum number `n` (nodes are numbered from `0`
+    /// to `n`), followed by a quadruple `u v t delay` of unsigned integers per line for
+    /// each temporal edge from node `u` to node `v` at time `t` with travel time `delay`.
+    #[structopt(parse(from_os_str), verbatim_doc_comment)]
     input: PathBuf,
 
-    /// Number of top nodes.
-    #[structopt(short, long, default_value = "0")]
+    /// Number of top nodes for top-k computation (see `top-k-shortest-closeness` command).
+    #[structopt(short, long, default_value = "100")]
     kappa: usize,
 
     /// Exact computation for betweenness with big rationals (otherwise approximate with floats).
@@ -176,8 +182,7 @@ fn main() {
 
         "tksc" | "top-k-shortest-closeness" => {
             let beta = if opt.beta == -1 { Time::MAX } else { Time::try_from(opt.beta).expect("unexpected beta value") };
-            let kappa = if opt.kappa == 0 { 100 } else { usize::try_from(opt.kappa).expect("unexpected kappa value")};
-            let top_hc = top_k_shortest_closeness(&tg, beta, kappa);
+            let top_hc = top_k_shortest_closeness(&tg, beta, opt.kappa);
             writeln!(out, "{:?}", top_hc).expect("IO goes fine");
         },
 
