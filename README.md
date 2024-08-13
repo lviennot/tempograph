@@ -6,7 +6,7 @@ Various algorithms in rust for computing optimum-cost temporal walks in temporal
 
 Intall rust and then:
 ```
-cargo build --release
+cargo build --release 
 ```
 
 Example:

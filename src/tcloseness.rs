@@ -54,7 +54,7 @@ pub fn top_shortest_closeness(tg: &TGraph, beta: Time) -> f64 {
     let mut hc_max = 0.;
     let mut tbfs = TBFS::new(tg);
     for &s in &deg_ord {
-        let hc = 
+        let hc =
             if beta == Time::MAX { tbfs.tbfs_inf_prune(tg, &succ, s, hc_max) } 
             else { tbfs.tbfs_prune(tg, &succ, s, hc_max) };
         if hc > hc_max { hc_max = hc }

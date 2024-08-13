@@ -88,7 +88,7 @@ struct Opt {
     #[structopt(short, long = "num-threads", default_value = "3")]
     nthreads: u32,
 
-    /// Input file: a temporal graph in the following format:
+    /// Input file: a temporal graph in the following format: 
     /// an optional first line with node maximum number `n` (nodes are numbered from `0`
     /// to `n`), followed by a quadruple `u v t delay` of unsigned integers per line for
     /// each temporal edge from node `u` to node `v` at time `t` with travel time `delay`.
