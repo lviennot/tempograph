@@ -320,13 +320,15 @@ impl<'tg, C : Cost, N : Num> TGraphSweep<'tg, C, N>{
                         vi.preds.pop_front();
                         let pred_walks = itv.walks.clone();
                         itv.walks -= self.e_inf[i as usize].walks.clone();
-                        let precision: N::Int = 1000u32.into();
-                        if ( ! N::i_is_exact()) 
-                                && itv.walks < pred_walks / precision {
-                            //log::info!("recompute nb walks for {v}");
-                            itv.walks = N::i_zero();
-                            for &i in &vi.preds {
-                                itv.walks += self.e_inf[i as usize].walks.clone();
+                        if ! N::i_is_exact() {
+                            if itv.walks <= N::i_zero() || vi.preds.is_empty() { itv.walks = N::i_zero(); }
+                            let precision: N::Int = 1000u32.into();
+                            if itv.walks < pred_walks / precision { // to ensure linearity: && vi.preds.len() <= 5 {
+                                //log::info!("recompute nb walks for {v}");
+                                itv.walks = N::i_zero();
+                                for &i in &vi.preds {
+                                    itv.walks += self.e_inf[i as usize].walks.clone();
+                                }
                             }
                         }
                         assert!(itv.preds > 0);
@@ -416,6 +418,7 @@ impl<'tg, C : Cost, N : Num> TGraphSweep<'tg, C, N>{
                         vi.r = e_r; // empty interval
                         vi.betw = N::r_zero();
                     }
+                    let pred = vi.betw.clone(); // track precision
                     for j in (max(e_r,vi.l) as usize .. vi.r as usize).rev() {
                         let f = &self.tg.edep[j];
                         let ej = &self.e_inf[j];
@@ -424,9 +427,11 @@ impl<'tg, C : Cost, N : Num> TGraphSweep<'tg, C, N>{
                         }
                     }
                     vi.r = e_r;
-                    if e_r <= vi.refresh && ! N::r_is_exact() { // reset to zero and recompute sum for better numerical stability
+                    let precision: N::Int = 1000u32.into();
+                    if ( ! N::r_is_exact()) && (e_r <= vi.refresh || vi.betw < pred / N::real_of_int(precision)) { // reset to zero and recompute sum for better numerical stability
                         vi.l = e_r; // empty interval
                         vi.betw = N::r_zero(); 
+                        vi.refresh = e_l;
                     }
                     for j in (e_l as usize .. min(e_r, vi.l) as usize).rev() {
                         let f = &self.tg.edep[j];

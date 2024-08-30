@@ -7,6 +7,7 @@ pub mod tsweep;
 pub mod tbetweenness;
 pub mod tbfs;
 pub mod tcloseness;
+pub mod tbetw;
 
 use tcloseness::*;
 use tgraph::*;
@@ -246,6 +247,19 @@ fn command<C: cost::Cost>(tg: &TGraph, opt: &Opt) {
             } else {
                 let bc = if opt.nthreads == 1 { betweenness_seq::<C, NumApprox>(&tg, beta) } else { betweenness_par::<C, NumApprox>(&tg, beta, opt.nthreads) };
                 for c in bc { writeln!(out, "{}", c).expect("IO goes fine"); }
+            }
+        }
+
+        "bd" | "betweenness-diff" => {
+            let bc_ext = if opt.nthreads == 1 { betweenness_seq::<C, NumExact>(&tg, beta) } else { betweenness_par::<C, NumExact>(&tg, beta, opt.nthreads) };
+            let bc_apx = if opt.nthreads == 1 { betweenness_seq::<C, NumApprox>(&tg, beta) } else { betweenness_par::<C, NumApprox>(&tg, beta, opt.nthreads) };
+            assert_eq!(bc_ext.len(), bc_apx.len());
+            for i in 0..bc_ext.len() {
+                let ext = &bc_ext[i];
+                let apx = bc_apx[i];
+                let err = ext.to_f64() - apx;
+                let err = err.abs();
+                writeln!(out, "{}", err).expect("IO goes fine"); 
             }
         }
 
