@@ -90,58 +90,6 @@ impl TBFS {
         }
     }    
 
-    pub fn tbfs_once(tg: &TGraph, succ: &Vec<(usize, usize)>, s: Node) -> f64 {
-        let mut tb = Self::new(tg);
-        let mut hc = 0.;
-        tb.check_size(tg);
-        tb.clear();
-        tb.u_hop[s] = 0; 
-        let rgt = tb.right_index.len(); tb.right_index.push(tg.u_fst[s+1]);
-        for i in tg.u_fst[s] .. tg.u_fst[s+1] {
-            tb.right[i] = rgt;
-            tb.hop[i] = 1;
-            let e = &tg.edep[i];
-            if tb.u_hop[e.v] == Hop::MAX {
-                tb.u_hop[e.v] = 1;
-                hc = hc + 1.;
-            }
-            tb.queue.push_back(i);
-        }
-        while let Some(i) = tb.queue.pop_front() {
-            let (l, r) = succ[i];
-            if l < r {
-                let h = tb.hop[i] + 1;
-                let hf = h as f64;
-                let mut rgt = tb.right[l];
-                if rgt == Eind::MAX {
-                    rgt = tb.right_index.len(); tb.right_index.push(l);
-                }
-                if tb.right_index[rgt] >= r { continue } // l..r window is included in the segment
-                let mut r_of_segment = r;
-                assert!(r_of_segment >= tb.right_index[rgt]);
-                for j in tb.right_index[rgt]..r {
-                    if tb.right[j] != Eind::MAX { 
-                        r_of_segment = tb.right_index[tb.right[j]];
-                        assert!(r_of_segment >= r);
-                        break 
-                    }
-                    tb.right[j] = rgt;
-                    if tb.hop[j] > h {
-                        tb.hop[j] = h;
-                        let e = &tg.edep[j];
-                        if tb.u_hop[e.v] > h { 
-                            assert!(tb.u_hop[e.v] == Hop::MAX);
-                            hc = hc + 1. / hf;
-                            tb.u_hop[e.v] = h }
-                        tb.queue.push_back(j);
-                    }
-                }
-                tb.right_index[rgt] = r_of_segment;
-            }
-        }
-        hc
-    }    
-
     pub fn tbfs_inf(&mut self, tg: &TGraph, succ: &Vec<(usize, usize)>, s: Node) {
         self.check_size(tg);
         self.clear();

@@ -185,7 +185,7 @@ impl Cost for Shortest {
 
 /// Cost of a temporal walk Q as (arr(Q), hop(Q)) (for minimization by lexicographic order). 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Copy, Clone, Debug)]
-pub struct ShortestForemost(pub u32); // hop(Q)
+pub struct ShortestForemost(pub Hop); // hop(Q)
 
 impl Add for ShortestForemost {
     type Output = Self;
