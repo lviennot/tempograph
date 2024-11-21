@@ -48,12 +48,14 @@ pub fn shortest_closeness(tg: &TGraph, beta: Time) -> Vec<f64> {
     let mut hc = vec![0.; tg.n];
     let mut tbfs = TBFS::new(tg);
     for s in 0..tg.n {
-        if beta == Time::MAX { 
+        if beta == Time::MAX {
             tbfs.tbfs_inf(tg, &succ, s);
-            hc[s] = harmonic_shortest_centrality(s, &tbfs.u_hop);
+            //hc[s] = harmonic_shortest_centrality(s, &tbfs.u_hop);
         } else { 
-            hc[s] = TBFS::tbfs_once(tg, &succ, s);
+            //hc[s] = TBFS::tbfs_once(tg, &succ, s);
+            tbfs.tbfs_inf(tg, &succ, s);
         }
+        hc[s] = harmonic_shortest_centrality(s, &tbfs.u_hop);
     }
     let duration = start.elapsed(); println!("Time elapsed: {:?}", duration);
     hc
