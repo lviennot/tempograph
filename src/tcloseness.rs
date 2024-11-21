@@ -33,14 +33,27 @@ fn harmonic_centrality<C: Cost>(s: Node, dist: &Vec<C::TargetCost>) -> f64 {
     hc
 }
 
+fn harmonic_shortest_centrality(s: Node, dist: &Vec<Hop>) -> f64 {
+    let mut hc = 0.;
+    let infty = Hop::MAX;
+    for t in 0..dist.len() {
+        if t != s && dist[t] < infty { hc += 1. / dist[t] as f64 }
+    }
+    hc
+}
+
 pub fn shortest_closeness(tg: &TGraph, beta: Time) -> Vec<f64> {
     let start = Instant::now();
     let succ = tg.extend_indexes(beta);
     let mut hc = vec![0.; tg.n];
     let mut tbfs = TBFS::new(tg);
     for s in 0..tg.n {
-        if beta == Time::MAX { tbfs.tbfs_inf(tg, &succ, s) } else { tbfs.tbfs(tg, &succ, s) };
-        hc[s] = harmonic_centrality::<Shortest>(s, &tbfs.u_hop);
+        if beta == Time::MAX { 
+            tbfs.tbfs_inf(tg, &succ, s);
+            hc[s] = harmonic_shortest_centrality(s, &tbfs.u_hop);
+        } else { 
+            hc[s] = TBFS::tbfs_once(tg, &succ, s);
+        }
     }
     let duration = start.elapsed(); println!("Time elapsed: {:?}", duration);
     hc

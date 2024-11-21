@@ -267,3 +267,19 @@ fn command<C: cost::Cost>(tg: &TGraph, opt: &Opt) {
     }
 
 }
+
+
+// use std::time::SystemTime;
+
+// fn timeit<F: FnMut() -> T, T>(nb_it: usize, what: &'static str, mut f: F) -> T {
+//     let start = SystemTime::now();
+//     let mut result = f(); // iter 0
+//     for _ in 1..nb_it {
+//         result = f();
+//     }
+//     let end = SystemTime::now();
+//     let duration = end.duration_since(start).unwrap();
+//     println!("{nb_it} {} took {} ms", what, duration.as_millis());
+//     result
+// }
+    
