@@ -190,7 +190,7 @@ impl TBFS {
             let r = std::cmp::min(r, self.u_left[vi]);
             let h = self.hop[i] + 1;
             let hc_ub = s_hc + (n_unreached as f64) / (h as f64);
-            if hc_ub < min_harm_clos { return hc_ub }
+            if hc_ub <= min_harm_clos { return hc_ub }
             for j in l..r {
                 if self.hop[j] > h {
                     self.hop[j] = h;
@@ -235,7 +235,7 @@ impl TBFS {
             if l < r {
                 let h = self.hop[i] + 1;
                 let hc_ub = s_hc + (n_unreached as f64) / (h as f64);
-                if hc_ub < min_harm_clos { return hc_ub }
+                if hc_ub <= min_harm_clos { return hc_ub }
                 let mut rgt = self.right[l];
                 if rgt == Eind::MAX {
                     rgt = self.right_index.len(); self.right_index.push(l);
