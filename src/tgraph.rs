@@ -138,7 +138,38 @@ impl FromStr for TEdge {
 
 impl TGraph {
 
-    pub fn new(mut earr: Vec<TEdge>) -> Self {
+    pub fn new(edep: Vec<TEdge>) -> Self { Self::new_acyclic(edep) }
+
+    pub fn new_positive_delays(mut edep: Vec<TEdge>) -> Self {
+        let m: usize = edep.len();
+        if m > Eind::max as usize { panic!("graph too large, need larger Eind type!") } // if using Eind = u32
+        let m = m as Eind;
+        let mut n:  Node = 0; // number of nodes
+        for e in &edep {
+            if e.u + 1 > n { n = e.u + 1; }
+            if e.v + 1 > n { n = e.v + 1; }
+            if e.d <= 0 { panic!("zero delay!") }
+        }
+
+        edep.sort_by(|e,f| e.cmp_u_t(&f));
+
+        let mut earr: Vec<Eind> = (0..m).collect();
+        earr.sort_by(|&i,&j| edep[i].cmp_arr(&edep[j]));
+
+        let mut u_fst: Vec<Eind> = vec![0; n+1]; // store out-deg and then index of first out-edge
+        for e in &edep {
+            u_fst[e.u+1] += 1; // out-deg in next cell
+        }
+       for u in 0..n { // prefix sum
+            u_fst[u+1] += u_fst[u];
+        }
+        assert_eq!(u_fst[n], m as Eind);
+
+        Self { n, m, edep, u_fst, earr, acyclic: true } // positive delays
+    }
+
+    // Allow zero delays as long as the graph is acyclic.
+    pub fn new_acyclic(mut earr: Vec<TEdge>) -> Self {
         let m: usize = earr.len();
         if m > Eind::max as usize { panic!("graph too large, need larger Eind type!") } // if using Eind = u32
         let m = m as Eind;

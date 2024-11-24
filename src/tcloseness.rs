@@ -51,7 +51,7 @@ pub fn shortest_closeness(tg: &TGraph, beta: Time) -> Vec<f64> {
         if beta == Time::MAX {
             tbfs.tbfs_inf(tg, &succ, s);
         } else { 
-            tbfs.tbfs_inf(tg, &succ, s);
+            tbfs.tbfs(tg, &succ, s);
         }
         hc[s] = harmonic_shortest_centrality(s, &tbfs.u_hop);
     }
