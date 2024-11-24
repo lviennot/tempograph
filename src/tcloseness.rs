@@ -55,7 +55,7 @@ pub fn shortest_closeness(tg: &TGraph, beta: Time) -> Vec<f64> {
         }
         hc[s] = harmonic_shortest_centrality(s, &tbfs.u_hop);
     }
-    let duration = start.elapsed(); println!("Time elapsed: {:?}", duration);
+    let duration = start.elapsed(); eprintln!("Time elapsed: {:?}", duration);
     hc
 }
 
