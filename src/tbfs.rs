@@ -90,6 +90,59 @@ impl TBFS {
         }
     }    
 
+    pub fn tbfs_harmonic_closeness(&mut self, tg: &TGraph, succ: &Vec<(usize, usize)>, s: Node) -> f64 {
+        let mut hc = 0.;
+        self.check_size(tg);
+        // clear:
+        self.u_hop.fill(Hop::MAX);
+        self.queue.clear();
+        self.right_index.clear();
+        self.hop.fill(Hop::MAX);
+        self.right.fill(Eind::MAX);
+        //
+        self.u_hop[s] = 0; 
+        let rgt = self.right_index.len(); self.right_index.push(tg.u_fst[s+1]);
+        for i in tg.u_fst[s] .. tg.u_fst[s+1] {
+            self.right[i] = rgt;
+            self.hop[i] = 1;
+            let e = &tg.edep[i];
+            if self.u_hop[e.v] == Hop::MAX {
+                self.u_hop[e.v] = 1;
+                hc += 1.;
+            }
+            self.queue.push_back(i);
+        }
+        while let Some(i) = self.queue.pop_front() {
+            let (l, r) = succ[i];
+            if l < r {
+                let h = self.hop[i] + 1;
+                let mut rgt = self.right[l];
+                if rgt == Eind::MAX {
+                    rgt = self.right_index.len(); self.right_index.push(l);
+                }
+                if self.right_index[rgt] >= r { continue } // l..r window is included in the segment
+                let mut r_of_segment = r;
+                assert!(r_of_segment >= self.right_index[rgt]);
+                for j in self.right_index[rgt]..r {
+                    if self.right[j] != Eind::MAX { 
+                        r_of_segment = self.right_index[self.right[j]];
+                        assert!(r_of_segment >= r);
+                        break 
+                    }
+                    self.right[j] = rgt;
+                    if self.hop[j] > h {
+                        self.hop[j] = h;
+                        let e = &tg.edep[j];
+                        if self.u_hop[e.v] > h { assert_eq!(self.u_hop[e.v], Hop::MAX); self.u_hop[e.v] = h ; hc += 1. / h as f64; }
+                        self.queue.push_back(j);
+                    }
+                }
+                self.right_index[rgt] = r_of_segment;
+            }
+        }
+        hc
+    }    
+
     pub fn tbfs_inf(&mut self, tg: &TGraph, succ: &Vec<(usize, usize)>, s: Node) {
         self.check_size(tg);
         self.clear();
