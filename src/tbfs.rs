@@ -94,20 +94,20 @@ impl TBFS {
         let mut hc = 0.;
         self.check_size(tg);
         // clear:
-        self.u_hop.fill(Hop::MAX);
+        self.u_hop.fill(0); // 0 means not seen yet, h means h-1
         self.queue.clear();
         self.right_index.clear();
         self.hop.fill(Hop::MAX);
         self.right.fill(Eind::MAX);
         //
-        self.u_hop[s] = 0; 
+        self.u_hop[s] = 1; 
         let rgt = self.right_index.len(); self.right_index.push(tg.u_fst[s+1]);
         for i in tg.u_fst[s] .. tg.u_fst[s+1] {
             self.right[i] = rgt;
             self.hop[i] = 1;
             let e = &tg.edep[i];
-            if self.u_hop[e.v] == Hop::MAX {
-                self.u_hop[e.v] = 1;
+            if self.u_hop[e.v] == 0 {
+                self.u_hop[e.v] = 2;
                 hc += 1.;
             }
             self.queue.push_back(i);
@@ -133,7 +133,7 @@ impl TBFS {
                     if self.hop[j] > h {
                         self.hop[j] = h;
                         let e = &tg.edep[j];
-                        if self.u_hop[e.v] > h { assert_eq!(self.u_hop[e.v], Hop::MAX); self.u_hop[e.v] = h ; hc += 1. / h as f64; }
+                        if self.u_hop[e.v] == 0 { self.u_hop[e.v] = h+1 ; hc += 1. / h as f64; }
                         self.queue.push_back(j);
                     }
                 }
@@ -176,6 +176,50 @@ impl TBFS {
             }
             self.u_left[vi] = l;
         }
+    }
+        
+    pub fn tbfs_harmonic_closeness_inf(&mut self, tg: &TGraph, succ: &Vec<(usize, usize)>, s: Node) -> f64 {
+        let mut hc = 0.;
+        self.check_size(tg);
+        // clear :
+        self.u_eat.fill(Time::MAX);
+        self.u_hop.fill(Hop::MAX);
+        self.u_left.fill(Eind::MAX);
+        self.queue.clear();
+        self.hop.fill(Hop::MAX);
+        //        
+        self.u_hop[s] = 0; 
+        self.u_eat[s] = Time::MIN;
+        for i in tg.u_fst[s] .. tg.u_fst[s+1] {
+            self.hop[i] = 1;
+            let e = &tg.edep[i];
+            if self.u_hop[e.v] == Hop::MAX || self.u_eat[e.v] > e.arr() {
+                if self.u_hop[e.v] == Hop::MAX { hc = hc + 1.; }
+                self.u_hop[e.v] = 1;
+                self.u_eat[e.v] = e.arr();
+                self.queue.push_back(i);
+            }
+        }
+        self.u_left[s] = tg.u_fst[s];
+        while let Some(i) = self.queue.pop_front() {
+            let (l, r) = succ[i];
+            let vi = tg.edep[i].v;
+            let r = std::cmp::min(r, self.u_left[vi]);
+            let h = self.hop[i] + 1;
+            for j in l..r {
+                if self.hop[j] > h {
+                    self.hop[j] = h;
+                    let e = &tg.edep[j];
+                    if self.u_hop[e.v] == Hop::MAX || self.u_eat[e.v] > e.arr() {
+                        if self.u_hop[e.v] == Hop::MAX { self.u_hop[e.v] = h; hc = hc + 1. / h as f64; }
+                        self.u_eat[e.v] = e.arr();
+                        self.queue.push_back(j);
+                    }
+                }
+            }
+            self.u_left[vi] = l;
+        }
+        hc
     }
         
     pub fn tbfs_non_linear(&mut self, tg: &TGraph, succ: &Vec<(usize, usize)>, s: Node) {
